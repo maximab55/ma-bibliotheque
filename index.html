@@ -223,7 +223,9 @@ async function enrichSeedBooks(){
       b.pages=b.pages || v.pageCount || "";
       b.category=b.category || (v.categories||[])[0] || "";
       b.description=b.description || v.description || "";
-      b.cover=b.cover || (v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
+      const apiCover=(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
+      const stableCover=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : "";
+      b.cover=b.cover || stableCover || apiCover;
       save(); render();
     }catch(e){}
     await new Promise(r=>setTimeout(r,120));
@@ -245,7 +247,8 @@ async function searchBooks(){
     if(!d.items?.length){ box.innerHTML='<div class="notice">Aucun résultat. Essaie avec le nom de l’auteur.</div>'; return; }
     box.innerHTML=d.items.map((item,i)=>{
       const v=item.volumeInfo||{};
-      const img=(v.imageLinks?.thumbnail||"").replace("http:","https:");
+      const apiImg=(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
+      const img=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : apiImg;
       return `<div class="result" onclick='chooseResult(${JSON.stringify({
         title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
         pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img
