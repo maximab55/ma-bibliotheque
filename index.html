@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f6f3ee">
+<title>Ma Bibliothèque</title>
+<style>
+  :root{
+    --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
+    --accent:#1d1d1f; --chip:#ece7df; --green:#dfeade; --blue:#e2ebf4; --sand:#efe7d2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
+  button,input,select,textarea{font:inherit}
+  .app{max-width:980px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(90px + env(safe-area-inset-bottom))}
+  header{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:14px}
+  h1{font-size:31px;line-height:1.05;margin:0}
+  .sub{color:var(--muted);font-size:14px;margin-top:5px}
+  .iconbtn,.primary,.ghost{border:0;border-radius:14px;padding:11px 14px;cursor:pointer}
+  .primary{background:var(--accent);color:white;font-weight:650}
+  .ghost{background:var(--chip);color:var(--ink)}
+  .search{display:flex;gap:8px;margin:18px 0 12px}
+  .search input{flex:1;border:1px solid var(--line);background:white;padding:14px 15px;border-radius:15px;outline:none}
+  .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:4px}
+  .tab{white-space:nowrap;border:0;background:var(--chip);padding:9px 13px;border-radius:999px}
+  .tab.active{background:var(--ink);color:white}
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin:23px 0 12px}
+  .section-head h2{font-size:20px;margin:0}
+  .count{color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  @media(min-width:650px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .book{cursor:pointer}
+  .cover{width:100%;aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:#ddd3c5;box-shadow:0 7px 18px rgba(35,25,10,.10);display:flex;align-items:center;justify-content:center}
+  .cover img{width:100%;height:100%;object-fit:cover}
+  .placeholder{padding:14px;text-align:center;font-weight:700;font-family:Georgia,serif}
+  .title{font-size:14px;font-weight:700;margin-top:9px;line-height:1.2}
+  .author{font-size:12px;color:var(--muted);margin-top:3px}
+  .badge{display:inline-block;font-size:11px;padding:5px 8px;border-radius:999px;background:var(--green);margin-top:6px}
+  .empty{border:1px dashed #cfc6bb;border-radius:18px;padding:26px;text-align:center;color:var(--muted)}
+  .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:9px 14px calc(9px + env(safe-area-inset-bottom));display:flex;justify-content:center}
+  .bottom-inner{max-width:980px;width:100%;display:flex;gap:9px}
+  .bottom button{flex:1}
+  .modal{position:fixed;inset:0;background:rgba(20,18,15,.42);display:none;align-items:flex-end;justify-content:center;z-index:50}
+  .modal.open{display:flex}
+  .sheet{background:var(--card);width:100%;max-width:760px;max-height:92vh;overflow:auto;border-radius:24px 24px 0 0;padding:19px 18px calc(26px + env(safe-area-inset-bottom))}
+  .grab{width:48px;height:5px;background:#d4cec6;border-radius:5px;margin:0 auto 16px}
+  .sheet h2{margin:0 0 14px}
+  .field{margin:12px 0}
+  .field label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:white;padding:12px}
+  textarea{min-height:86px;resize:vertical}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .results{display:grid;gap:9px;margin-top:12px}
+  .result{display:flex;gap:11px;border:1px solid var(--line);background:white;border-radius:14px;padding:10px;cursor:pointer}
+  .result img{width:48px;height:72px;object-fit:cover;border-radius:5px;background:#ddd}
+  .result strong{display:block}
+  .result small{color:var(--muted)}
+  .detail-top{display:grid;grid-template-columns:115px 1fr;gap:16px}
+  .detail-cover{width:115px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;background:#ddd3c5}
+  .detail-cover img{width:100%;height:100%;object-fit:cover}
+  .detail-title{font-size:24px;font-weight:750;line-height:1.1;margin:0}
+  .meta{color:var(--muted);font-size:14px;margin-top:7px;line-height:1.45}
+  .stars{font-size:25px;letter-spacing:2px;margin:12px 0}
+  .block{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .block h3{margin:0 0 7px;font-size:14px}
+  .block p{margin:0;line-height:1.45}
+  .toolbar{display:flex;gap:8px;margin-top:20px}
+  .toolbar button{flex:1}
+  .notice{font-size:12px;color:var(--muted);line-height:1.4}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Ma bibliothèque</h1>
+      <div class="sub">Locale, personnelle, sans compte.</div>
+    </div>
+    <button class="primary" onclick="openAdd()">＋ Ajouter</button>
+  </header>
+
+  <div class="search">
+    <input id="librarySearch" placeholder="Rechercher un titre ou un auteur…" oninput="render()">
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-status="Tous">Tous</button>
+    <button class="tab" data-status="À acheter">À acheter</button>
+    <button class="tab" data-status="À lire">À lire</button>
+    <button class="tab" data-status="En cours">En cours</button>
+    <button class="tab" data-status="Lu">Lus</button>
+  </div>
+
+  <div class="section-head">
+    <h2 id="sectionTitle">Tous les livres</h2>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="bottom">
+  <div class="bottom-inner">
+    <button class="ghost" onclick="exportData()">Exporter mes données</button>
+    <button class="ghost" onclick="document.getElementById('importFile').click()">Importer</button>
+    <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)">
+  </div>
+</div>
+
+<div class="modal" id="addModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2>Ajouter un livre</h2>
+    <div class="field">
+      <label>Titre ou auteur</label>
+      <input id="bookQuery" placeholder="Ex. Le joueur d'échecs Zweig">
+    </div>
+    <button class="primary" style="width:100%" onclick="searchBooks()">Chercher automatiquement</button>
+    <p class="notice">La recherche part vers Google Books. Tes notes et ta bibliothèque ne sont pas envoyées.</p>
+    <div class="results" id="results"></div>
+    <div class="toolbar"><button class="ghost" onclick="closeAdd()">Fermer</button></div>
+  </div>
+</div>
+
+<div class="modal" id="editModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div id="editContent"></div>
+  </div>
+</div>
+
+<script>
+const seed = [
+  {id:"seed1",title:"Vingt-quatre heures dans la vie d'une femme",author:"Stefan Zweig",pages:128,status:"Lu",finished:"2026-07-21",review:"J’ai adoré l’histoire, l’écriture, la French Riviera. Tout.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman / nouvelle",description:"",cover:""},
+  {id:"seed2",title:"Le Petit Prince",author:"Antoine de Saint-Exupéry",pages:93,status:"Lu",finished:"2026-07-04",review:"Bien mais pas aussi fou que les gens en parlent. Pour moi rien de dingue, juste un petit essai sur le fait de profiter de la vie et de ses proches. Écriture que je n’ai pas particulièrement appréciée.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Conte",description:"",cover:""},
+  {id:"seed3",title:"Rompre le charme",author:"Amanda Sthers",pages:142,status:"Lu",finished:"2026-06-27",review:"J’ai adoré. Déjà l’écriture comme d’habitude, mais surtout la manière de parler de l’enfance, de ce qu’on se dit et de ce que l’on ne se dit pas.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed4",title:"Le joueur d’échecs",author:"Stefan Zweig",pages:116,status:"Lu",finished:"2026-06-07",review:"Très court. Super écriture, ça donne envie de lire Zweig. J’ai beaucoup aimé, ça se lit en moins d’une heure. J’attends de lire plus long de lui.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Nouvelle",description:"",cover:""},
+  {id:"seed5",title:"Soie",author:"Alessandro Baricco",pages:142,status:"Lu",finished:"2026-05-23",review:"Très sympa. Rapide. On est entraîné dans le récit.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed6",title:"Une façon d’aimer",author:"Dominique Barbéris",pages:203,status:"Lu",finished:"2026-05-17",review:"Agréable. Belle écriture même si l’histoire ne m’a pas emballé. Mais c’est beau.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed7",title:"Les gestes",author:"Amanda Sthers",pages:285,status:"Lu",finished:"2026-05-16",review:"Lu avec Laurène. On adore son écriture, la manière de faire des boucles dans la vie des gens. De raconter l’amour, de raconter la vie. Toujours émouvant.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed8",title:"Pour que tu ne te perdes pas dans le quartier",author:"Patrick Modiano",pages:146,status:"Lu",finished:"2026-05-03",review:"Bonne écriture. Haletant. En revanche je n’ai pas accroché sur la fin du tout.",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed9",title:"Stupeur",author:"Zeruya Shalev",pages:364,status:"Lu",finished:"",review:"",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed10",title:"La vie heureuse",author:"David Foenkinos",pages:245,status:"Lu",finished:"",review:"",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed11",title:"Le livre de ma mère",author:"Albert Cohen",pages:173,status:"Lu",finished:"",review:"",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Récit",description:"",cover:""},
+  {id:"seed12",title:"Le café suspendu",author:"Amanda Sthers",pages:229,status:"Lu",finished:"",review:"",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""},
+  {id:"seed13",title:"Un secret",author:"Philippe Grimbert",pages:191,status:"Lu",finished:"",review:"",format:"",owner:"À moi",recommendTo:"",publisher:"",year:"",category:"Roman",description:"",cover:""}
+];
+
+let books = JSON.parse(localStorage.getItem("mybooks-v1") || "null") || seed;
+let activeStatus = "Tous";
+save();
+
+function save(){ localStorage.setItem("mybooks-v1", JSON.stringify(books)); }
+
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    btn.classList.add("active");
+    activeStatus=btn.dataset.status;
+    render();
+  }
+});
+
+function esc(s=""){ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
+
+function render(){
+  const q=document.getElementById("librarySearch").value.trim().toLowerCase();
+  let list=books.filter(b=>(activeStatus==="Tous" || b.status===activeStatus) && (!q || (b.title+" "+b.author).toLowerCase().includes(q)));
+  list.sort((a,b)=>(b.finished||"").localeCompare(a.finished||"") || a.title.localeCompare(b.title));
+  document.getElementById("sectionTitle").textContent=activeStatus==="Tous"?"Tous les livres":activeStatus;
+  document.getElementById("count").textContent=list.length+" livre"+(list.length>1?"s":"");
+  const grid=document.getElementById("grid");
+  if(!list.length){grid.innerHTML='<div class="empty" style="grid-column:1/-1">Aucun livre ici pour le moment.</div>';return}
+  grid.innerHTML=list.map(b=>`
+    <div class="book" onclick="openBook('${b.id}')">
+      <div class="cover">${b.cover?`<img src="${esc(b.cover)}" onerror="this.parentNode.innerHTML='<div class=&quot;placeholder&quot;>${esc(b.title)}</div>'">`:`<div class="placeholder">${esc(b.title)}</div>`}</div>
+      <div class="title">${esc(b.title)}</div>
+      <div class="author">${esc(b.author||"Auteur inconnu")}</div>
+      <span class="badge">${esc(b.status)}</span>
+    </div>`).join("");
+}
+render();
+
+function openAdd(){ document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
+function closeAdd(){ document.getElementById("addModal").classList.remove("open"); document.getElementById("results").innerHTML=""; }
+
+async function searchBooks(){
+  const q=document.getElementById("bookQuery").value.trim();
+  const box=document.getElementById("results");
+  if(!q)return;
+  box.innerHTML='<div class="notice">Recherche…</div>';
+  try{
+    const r=await fetch("https://www.googleapis.com/books/v1/volumes?q="+encodeURIComponent(q)+"&maxResults=8");
+    const d=await r.json();
+    if(!d.items?.length){ box.innerHTML='<div class="notice">Aucun résultat. Essaie avec le nom de l’auteur.</div>'; return; }
+    box.innerHTML=d.items.map((item,i)=>{
+      const v=item.volumeInfo||{};
+      const img=(v.imageLinks?.thumbnail||"").replace("http:","https:");
+      return `<div class="result" onclick='chooseResult(${JSON.stringify({
+        title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
+        pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img
+      }).replace(/'/g,"&#39;")})'>
+        ${img?`<img src="${esc(img)}">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
+        <div><strong>${esc(v.title||"Sans titre")}</strong><small>${esc((v.authors||[]).join(", "))}<br>${esc(v.publisher||"")}${v.publishedDate?" · "+esc(v.publishedDate):""}${v.pageCount?" · "+v.pageCount+" p.":""}</small></div>
+      </div>`;
+    }).join("");
+  }catch(e){
+    box.innerHTML='<div class="notice">La recherche Internet n’a pas répondu. Tu peux réessayer plus tard.</div>';
+  }
+}
+
+function chooseResult(data){
+  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",recommendTo:"",source:"",why:"",started:"",finished:"",...data};
+  books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
+}
+
+function openBook(id){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  const date=b.finished?new Date(b.finished+"T12:00:00").toLocaleDateString("fr-FR"):"";
+  document.getElementById("editContent").innerHTML=`
+    <div class="detail-top">
+      <div class="detail-cover">${b.cover?`<img src="${esc(b.cover)}">`:`<div class="placeholder">${esc(b.title)}</div>`}</div>
+      <div>
+        <h2 class="detail-title">${esc(b.title)}</h2>
+        <div class="meta">${esc(b.author||"")}<br>${[b.publisher,b.year,b.pages?b.pages+" pages":"",b.category].filter(Boolean).map(esc).join(" · ")}</div>
+        ${b.rating?`<div class="stars">${"★".repeat(b.rating)}${"☆".repeat(5-b.rating)}</div>`:""}
+        <span class="badge">${esc(b.status)}</span>
+      </div>
+    </div>
+    ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
+    ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
+    ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
+    <div class="block">
+      <h3>Ma lecture</h3>
+      <p>${[b.format,b.owner,b.borrowedFrom?"à "+b.borrowedFrom:"",date?"Terminé le "+date:"",b.recommendTo?"À faire lire à "+b.recommendTo:""].filter(Boolean).map(esc).join(" · ") || "À compléter"}</p>
+    </div>
+    <div class="toolbar">
+      <button class="primary" onclick="editBook('${b.id}')">Modifier</button>
+      <button class="ghost" onclick="closeEdit()">Fermer</button>
+    </div>`;
+  document.getElementById("editModal").classList.add("open");
+}
+
+function closeEdit(){document.getElementById("editModal").classList.remove("open")}
+
+function editBook(id){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  document.getElementById("editContent").innerHTML=`
+    <h2>Modifier</h2>
+    <div class="field"><label>Titre</label><input id="fTitle" value="${esc(b.title)}"></div>
+    <div class="field"><label>Auteur</label><input id="fAuthor" value="${esc(b.author||"")}"></div>
+    <div class="row">
+      <div class="field"><label>Statut</label><select id="fStatus">${["À acheter","À lire","En cours","Lu"].map(x=>`<option ${b.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Pages</label><input type="number" id="fPages" value="${esc(b.pages||"")}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Éditeur</label><input id="fPublisher" value="${esc(b.publisher||"")}"></div>
+      <div class="field"><label>Année</label><input id="fYear" value="${esc(b.year||"")}"></div>
+    </div>
+    <div class="field"><label>Genre / thème</label><input id="fCategory" value="${esc(b.category||"")}"></div>
+    <div class="field"><label>Résumé</label><textarea id="fDescription">${esc(stripHtml(b.description||""))}</textarea></div>
+    <div class="row">
+      <div class="field"><label>Source</label><select id="fSource">
+        ${["","Podcast","Article","Instagram","Ami","Autre"].map(x=>`<option ${b.source===x?"selected":""}>${x}</option>`).join("")}
+      </select></div>
+      <div class="field"><label>Note / 5</label><select id="fRating">${[0,1,2,3,4,5].map(x=>`<option value="${x}" ${Number(b.rating||0)===x?"selected":""}>${x||"—"}</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label>Pourquoi je l’ai noté</label><textarea id="fWhy">${esc(b.why||"")}</textarea></div>
+    <div class="field"><label>Mon avis</label><textarea id="fReview">${esc(b.review||"")}</textarea></div>
+    <div class="row">
+      <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Propriété</label><select id="fOwner">${["À moi","Emprunté"].map(x=>`<option ${b.owner===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label>Si emprunté, à qui ?</label><input id="fBorrowed" value="${esc(b.borrowedFrom||"")}"></div>
+    <div class="field"><label>À faire lire à</label><input id="fRecommend" value="${esc(b.recommendTo||"")}" placeholder="Ex. Laurène, Joseph…"></div>
+    <div class="row">
+      <div class="field"><label>Commencé le</label><input type="date" id="fStarted" value="${esc(b.started||"")}"></div>
+      <div class="field"><label>Terminé le</label><input type="date" id="fFinished" value="${esc(b.finished||"")}"></div>
+    </div>
+    <div class="toolbar">
+      <button class="primary" onclick="saveEdit('${b.id}')">Enregistrer</button>
+      <button class="ghost" onclick="deleteBook('${b.id}')">Supprimer</button>
+    </div>`;
+}
+
+function saveEdit(id){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  Object.assign(b,{
+    title:fTitle.value.trim(),author:fAuthor.value.trim(),status:fStatus.value,pages:Number(fPages.value)||"",
+    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),
+    description:fDescription.value.trim(),source:fSource.value,rating:Number(fRating.value)||0,why:fWhy.value.trim(),
+    review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
+    recommendTo:fRecommend.value.trim(),started:fStarted.value,finished:fFinished.value
+  });
+  save(); render(); openBook(id);
+}
+
+function deleteBook(id){
+  if(!confirm("Supprimer ce livre de ta bibliothèque ?"))return;
+  books=books.filter(x=>x.id!==id); save(); closeEdit(); render();
+}
+function stripHtml(s){ const d=document.createElement("div"); d.innerHTML=s||""; return d.textContent||""; }
+
+function exportData(){
+  const blob=new Blob([JSON.stringify(books,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="ma-bibliotheque.json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importData(e){
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader(); r.onload=()=>{
+    try{const d=JSON.parse(r.result); if(!Array.isArray(d))throw 0; books=d; save(); render(); alert("Bibliothèque importée.");}
+    catch{alert("Fichier invalide.");}
+  }; r.readAsText(f);
+}
+</script>
+</body>
+</html>
