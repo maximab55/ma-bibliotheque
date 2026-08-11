@@ -102,6 +102,11 @@
   .edition-tag.recommended{background:var(--green);font-weight:700}
   .edition-tag.pocket{background:var(--sand)}
   .edition-tag.current{background:var(--blue);font-weight:700}
+  .delete-zone{margin-top:14px;text-align:center}
+  .danger-link{border:0;background:transparent;color:#b42318;padding:10px 12px;font-size:13px;text-decoration:underline;text-underline-offset:3px}
+  .danger{border:0;border-radius:14px;padding:11px 14px;background:#b42318;color:white;font-weight:700}
+  .confirm-text{font-size:16px;line-height:1.5;margin:8px 0 18px}
+  .confirm-title{font-weight:750}
 </style>
 </head>
 <body>
@@ -178,8 +183,21 @@
   </div>
 </div>
 
+<div class="modal" id="deleteModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2>Supprimer ce livre ?</h2>
+    <p class="confirm-text">Tu es sur le point de supprimer <span class="confirm-title" id="deleteBookTitle"></span> de ta bibliothèque.</p>
+    <p class="notice">Cette suppression sera enregistrée et le livre ne réapparaîtra pas au prochain chargement.</p>
+    <div class="toolbar">
+      <button class="ghost" onclick="closeDeleteConfirm()">Annuler</button>
+      <button class="danger" onclick="confirmDeleteBook()">Oui, supprimer</button>
+    </div>
+  </div>
+
+
 <script>
-// Ma Bibliothèque V10 — Google Books + Open Library + retry automatique
+// Ma Bibliothèque V11 — suppression visible + confirmation + suppression persistante
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -552,10 +570,12 @@ const seed = [
   {id:"seed16",title:"J’ai perdu un bédouin dans Paris",author:"",status:"Lu",rating:3,started:"2025-10-17",finished:"2025-12-15",readingDays:59,review:"Facile à lire. Émouvant mais tout de même très convenu. Parfois naïf. On y apprend toutefois pas mal de choses.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""}
 ];
 
+const DELETED_KEY = "mybooks-deleted-v1";
+let deletedIds = new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || "[]"));
 const previous = JSON.parse(localStorage.getItem("mybooks-v1") || "null") || [];
 const seedIds = new Set(seed.map(b=>b.id));
 let books = [
-  ...seed.map(fresh => {
+  ...seed.filter(fresh=>!deletedIds.has(fresh.id)).map(fresh => {
     const old = previous.find(x=>x.id===fresh.id) || {};
     return {...fresh, ...old,
       // Données personnelles : ne jamais les écraser par une nouvelle version du code.
@@ -593,12 +613,13 @@ let books = [
       editionVersion: old.editionVersion || fresh.editionVersion || ""
     };
   }),
-  ...previous.filter(x=>!seedIds.has(x.id))
+  ...previous.filter(x=>!seedIds.has(x.id) && !deletedIds.has(x.id))
 ];
 let activeStatus = "Tous";
 save();
 
 function save(){ localStorage.setItem("mybooks-v1", JSON.stringify(books)); }
+function saveDeleted(){ localStorage.setItem(DELETED_KEY, JSON.stringify([...deletedIds])); }
 
 document.querySelectorAll(".tab").forEach(btn=>{
   btn.onclick=()=>{
@@ -1160,6 +1181,9 @@ function openBook(id){
     <div class="toolbar">
       <button class="primary" onclick="editBook('${b.id}')">Modifier</button>
       <button class="ghost" onclick="closeEdit()">Fermer</button>
+    </div>
+    <div class="delete-zone">
+      <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer de ma bibliothèque</button>
     </div>`;
   document.getElementById("editModal").classList.add("open");
 }
@@ -1336,7 +1360,7 @@ function editBook(id){
     <div class="field"><label>Nombre de jours</label><input type="number" id="fDays" value="${esc(b.readingDays||"")}"></div>
     <div class="toolbar">
       <button class="primary" onclick="saveEdit('${b.id}')">Enregistrer</button>
-      <button class="ghost" onclick="deleteBook('${b.id}')">Supprimer</button>
+      <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer</button>
     </div>`;
 }
 
@@ -1364,22 +1388,72 @@ function saveEdit(id){
   save(); render(); openBook(id);
 }
 
-function deleteBook(id){
-  if(!confirm("Supprimer ce livre de ta bibliothèque ?"))return;
-  books=books.filter(x=>x.id!==id); save(); closeEdit(); render();
+let pendingDeleteId="";
+
+function askDeleteBook(id){
+  const b=books.find(x=>x.id===id);
+  if(!b)return;
+  pendingDeleteId=id;
+  document.getElementById("deleteBookTitle").textContent="« "+b.title+" »";
+  document.getElementById("deleteModal").classList.add("open");
+}
+
+function closeDeleteConfirm(){
+  pendingDeleteId="";
+  document.getElementById("deleteModal").classList.remove("open");
+}
+
+function confirmDeleteBook(){
+  if(!pendingDeleteId)return;
+  const id=pendingDeleteId;
+
+  // Tombstone: indispensable pour les livres initiaux codés dans l’application.
+  // Sans cela, un seed supprimé réapparaîtrait au prochain rechargement.
+  deletedIds.add(id);
+  saveDeleted();
+
+  books=books.filter(x=>x.id!==id);
+  save();
+
+  closeDeleteConfirm();
+  closeEditionChooser();
+  closeEdit();
+  render();
 }
 function stripHtml(s){ const d=document.createElement("div"); d.innerHTML=s||""; return d.textContent||""; }
 
 function exportData(){
-  const blob=new Blob([JSON.stringify(books,null,2)],{type:"application/json"});
+  const backup={
+    version:2,
+    books,
+    deletedIds:[...deletedIds]
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="ma-bibliotheque.json"; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function importData(e){
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader(); r.onload=()=>{
-    try{const d=JSON.parse(r.result); if(!Array.isArray(d))throw 0; books=d; save(); render(); alert("Bibliothèque importée.");}
-    catch{alert("Fichier invalide.");}
+    try{
+      const d=JSON.parse(r.result);
+      if(Array.isArray(d)){
+        // Anciennes sauvegardes V1 : tableau de livres uniquement.
+        books=d;
+        deletedIds=new Set();
+      }else if(d && Array.isArray(d.books)){
+        books=d.books;
+        deletedIds=new Set(Array.isArray(d.deletedIds)?d.deletedIds:[]);
+      }else{
+        throw 0;
+      }
+      save();
+      saveDeleted();
+      render();
+      alert("Bibliothèque importée.");
+    }catch{
+      alert("Fichier invalide.");
+    }
   }; r.readAsText(f);
 }
 </script>
