@@ -28,6 +28,13 @@
   .tab.active{background:var(--ink);color:white}
   .section-head{display:flex;justify-content:space-between;align-items:center;margin:23px 0 12px}
   .section-head h2{font-size:20px;margin:0}
+  .section-tools{display:flex;align-items:center;gap:8px}
+  .sort-select{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:7px 10px;font-size:12px;max-width:190px}
+  @media(max-width:430px){
+    .section-head{align-items:flex-start;gap:10px}
+    .section-tools{flex-direction:column-reverse;align-items:flex-end;gap:5px}
+    .sort-select{max-width:175px}
+  }
   .count{color:var(--muted);font-size:13px}
   .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
   @media(min-width:650px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -133,7 +140,16 @@
 
   <div class="section-head">
     <h2 id="sectionTitle">Tous les livres</h2>
-    <div class="count" id="count"></div>
+    <div class="section-tools">
+      <select class="sort-select" id="sortSelect" onchange="changeSort(this.value)">
+        <option value="smart">En cours d’abord</option>
+        <option value="chronology">Chronologie de lecture</option>
+        <option value="title">Titre A → Z</option>
+        <option value="author">Auteur A → Z</option>
+        <option value="rating">Meilleure note</option>
+      </select>
+      <div class="count" id="count"></div>
+    </div>
   </div>
   <div class="grid" id="grid"></div>
 </div>
@@ -197,7 +213,7 @@
 
 
 <script>
-// Ma Bibliothèque V11 — suppression visible + confirmation + suppression persistante
+// Ma Bibliothèque V12 — tri + import liste À acheter
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -567,7 +583,37 @@ const seed = [
   {id:"seed13",title:"Un secret",author:"Philippe Grimbert",status:"Lu",rating:5,started:"2026-03-02",finished:"2026-03-23",readingDays:21,review:"Bouleversant. Super écriture, zéro longueur. Tout va très vite et en même temps nous avons tous les détails du récit. Quand on commence à comprendre il est déjà trop tard et la tristesse s’empare de nous. Magnifique.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
   {id:"seed14",title:"Le Soleil des Scorta",author:"Laurent Gaudé",status:"Lu",rating:4,started:"2026-02-01",finished:"2026-02-22",readingDays:21,review:"Facile à lire. J’adore l’écriture. Super thème de la famille. J’ai adoré vraiment. Un vrai parfum d’Italie. Ça sent le sud de l’Italie, le soleil.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
   {id:"seed15",title:"Ô vous, frères humains",author:"Albert Cohen",status:"Lu",rating:3,started:"2025-12-25",finished:"2026-01-31",readingDays:37,review:"Assez difficile à lire. Écriture très particulière. Décrit surtout ses pensées tout du long. Magnifique fin.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
-  {id:"seed16",title:"J’ai perdu un bédouin dans Paris",author:"",status:"Lu",rating:3,started:"2025-10-17",finished:"2025-12-15",readingDays:59,review:"Facile à lire. Émouvant mais tout de même très convenu. Parfois naïf. On y apprend toutefois pas mal de choses.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""}
+  {id:"seed16",title:"J’ai perdu un bédouin dans Paris",author:"",status:"Lu",rating:3,started:"2025-10-17",finished:"2025-12-15",readingDays:59,review:"Facile à lire. Émouvant mais tout de même très convenu. Parfois naïf. On y apprend toutefois pas mal de choses.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
+  {id:"buy1",title:"The Road Less Traveled",author:"M. Scott Peck",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"Kindle",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"Version anglaise · Kindle · 1 £",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:06:00+02:00"},
+  {id:"buy2",title:"Tout Robuchon",author:"Joël Robuchon",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:07:00+02:00"},
+  {id:"buy3",title:"Moi j’attends",author:"Davide Cali",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:08:00+02:00"},
+  {id:"buy4",title:"La Très Catastrophique Visite du Zoo",author:"Joël Dicker",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:09:00+02:00"},
+  {id:"buy5",title:"L’Homme qui plantait des arbres",author:"Jean Giono",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"3 exemplaires",quantity:3,autoEnrich:true,addedAt:"2026-08-11T17:10:00+02:00"},
+  {id:"buy6",title:"L’Alchimiste",author:"Paulo Coelho",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:11:00+02:00"},
+  {id:"buy7",title:"La Force majeure",author:"Clément Rosset",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:12:00+02:00"},
+  {id:"buy8",title:"Dictionnaire amoureux des Juifs de France",author:"Denis Olivennes",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:13:00+02:00"},
+  {id:"buy9",title:"Penser contre soi-même",author:"Nathan Devers",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:14:00+02:00"},
+  {id:"buy10",title:"L’Heure des prédateurs",author:"Giuliano da Empoli",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:15:00+02:00"},
+  {id:"buy11",title:"Ce que la vie m’a appris",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:16:00+02:00"},
+  {id:"buy12",title:"Chasseurs cueilleurs",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:17:00+02:00"},
+  {id:"buy13",title:"Jours barbares",author:"William Finnegan",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:18:00+02:00"},
+  {id:"buy14",title:"La voix du sentir",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:19:00+02:00"},
+  {id:"buy15",title:"Empire of AI",author:"Karen Hao",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:20:00+02:00"},
+  {id:"buy16",title:"Limonov",author:"Emmanuel Carrère",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:21:00+02:00"},
+  {id:"buy17",title:"Les Très Riches Heures de l’humanité",author:"Stefan Zweig",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:22:00+02:00"},
+  {id:"buy18",title:"On l’appelait Bennie Diamond",author:"Michaël Dichter",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:23:00+02:00"},
+  {id:"buy19",title:"Le Nom du vent",author:"Patrick Rothfuss",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:24:00+02:00"},
+  {id:"buy20",title:"L’élégance de la manipulation",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:25:00+02:00"},
+  {id:"buy21",title:"Aimer Jérusalem",author:"Nathan Devers",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:26:00+02:00"},
+  {id:"buy22",title:"De la performance à l’excellence",author:"Jim Collins",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:27:00+02:00"},
+  {id:"buy23",title:"Autobiographie d’un yogi",author:"Paramahansa Yogananda",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:28:00+02:00"},
+  {id:"buy24",title:"La Promesse de Leiba",author:"Claude Tovel Posternak",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:29:00+02:00"},
+  {id:"buy25",title:"Maud Ankaoua",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"Auteur noté dans la liste · titre à préciser",quantity:1,autoEnrich:false,addedAt:"2026-08-11T17:30:00+02:00"},
+  {id:"buy26",title:"Schmattès",author:"Guillaume Erner",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:31:00+02:00"},
+  {id:"buy27",title:"Le lotus et le cosmos",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:32:00+02:00"},
+  {id:"buy28",title:"Manual: To a Son with Down Syndrome",author:"",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:33:00+02:00"},
+  {id:"buy29",title:"Consolation",author:"Anne-Dauphine Julliand",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:34:00+02:00"},
+  {id:"buy30",title:"Les mots sont des fenêtres",author:"Marshall B. Rosenberg",status:"À acheter",rating:0,started:"",finished:"",readingDays:"",review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:"",purchaseNote:"",quantity:1,autoEnrich:true,addedAt:"2026-08-11T17:35:00+02:00"}
 ];
 
 const DELETED_KEY = "mybooks-deleted-v1";
@@ -590,6 +636,10 @@ let books = [
       borrowedFrom: old.borrowedFrom || fresh.borrowedFrom || "",
       loanedTo: old.loanedTo || fresh.loanedTo,
       recommendTo: old.recommendTo || fresh.recommendTo,
+      purchaseNote: old.purchaseNote || fresh.purchaseNote || "",
+      quantity: (old.quantity !== undefined && old.quantity !== null && old.quantity !== "") ? old.quantity : (fresh.quantity || 1),
+      autoEnrich: old.autoEnrich !== undefined ? old.autoEnrich : (fresh.autoEnrich !== false),
+      addedAt: old.addedAt || fresh.addedAt || "",
 
       // Métadonnées bibliographiques / Google Books déjà enrichies.
       cover: old.cover || fresh.cover,
@@ -616,6 +666,7 @@ let books = [
   ...previous.filter(x=>!seedIds.has(x.id) && !deletedIds.has(x.id))
 ];
 let activeStatus = "Tous";
+let sortMode = localStorage.getItem("mybooks-sort-v1") || "smart";
 save();
 
 function save(){ localStorage.setItem("mybooks-v1", JSON.stringify(books)); }
@@ -629,6 +680,55 @@ document.querySelectorAll(".tab").forEach(btn=>{
     render();
   }
 });
+
+function changeSort(value){
+  sortMode=value||"smart";
+  localStorage.setItem("mybooks-sort-v1",sortMode);
+  render();
+}
+
+function readingDateKey(b){
+  return b.finished || b.started || "";
+}
+
+function smartCompare(a,b){
+  const order={"En cours":0,"À lire":1,"À acheter":2,"Lu":3};
+  const sa=order[a.status] ?? 9, sb=order[b.status] ?? 9;
+  if(sa!==sb) return sa-sb;
+  if(a.status==="Lu"){
+    return (b.finished||b.started||"").localeCompare(a.finished||a.started||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+  if(a.status==="En cours"){
+    return (b.started||"").localeCompare(a.started||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+  if(a.status==="À acheter"){
+    return (b.addedAt||"").localeCompare(a.addedAt||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+  return a.title.localeCompare(b.title,"fr");
+}
+
+function sortBooks(list){
+  return [...list].sort((a,b)=>{
+    if(sortMode==="title") return a.title.localeCompare(b.title,"fr");
+    if(sortMode==="author"){
+      const aa=a.author||"zzzz", bb=b.author||"zzzz";
+      return aa.localeCompare(bb,"fr") || a.title.localeCompare(b.title,"fr");
+    }
+    if(sortMode==="rating"){
+      return (Number(b.rating)||0)-(Number(a.rating)||0) ||
+        (b.finished||"").localeCompare(a.finished||"") ||
+        a.title.localeCompare(b.title,"fr");
+    }
+    if(sortMode==="chronology"){
+      return readingDateKey(b).localeCompare(readingDateKey(a)) ||
+        a.title.localeCompare(b.title,"fr");
+    }
+    return smartCompare(a,b);
+  });
+}
 
 function esc(s=""){ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
 
@@ -655,7 +755,7 @@ function displayOwner(b){
 function render(){
   const q=document.getElementById("librarySearch").value.trim().toLowerCase();
   let list=books.filter(b=>(activeStatus==="Tous" || b.status===activeStatus) && (!q || (b.title+" "+b.author).toLowerCase().includes(q)));
-  list.sort((a,b)=>(b.finished||"").localeCompare(a.finished||"") || a.title.localeCompare(b.title));
+  list=sortBooks(list);
   document.getElementById("sectionTitle").textContent=activeStatus==="Tous"?"Tous les livres":activeStatus;
   document.getElementById("count").textContent=list.length+" livre"+(list.length>1?"s":"");
   const grid=document.getElementById("grid");
@@ -665,9 +765,10 @@ function render(){
       <div class="cover">${coverImgHtml(b,true)}</div>
       <div class="title">${esc(b.title)}</div>
       <div class="author">${esc(b.author||"Auteur inconnu")}</div>
-      <span class="badge">${esc(b.status)}</span>
+      <span class="badge">${esc(b.status)}${b.status==="À acheter"&&Number(b.quantity)>1?" · ×"+Number(b.quantity):""}</span>
     </div>`).join("");
 }
+document.getElementById("sortSelect").value=sortMode;
 render();
 
 function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -1084,6 +1185,42 @@ async function enrichSeedBooks(){
 }
 setTimeout(enrichSeedBooks,500);
 
+async function enrichImportedBuyBooks(){
+  const candidates=books.filter(b=>
+    /^buy\d+$/.test(b.id) &&
+    b.autoEnrich!==false &&
+    !b.editionLocked &&
+    !b.metadataCheckedAt &&
+    !deletedIds.has(b.id)
+  );
+
+  for(const b of candidates){
+    try{
+      const query=[b.title,b.author].filter(Boolean).join(" ");
+      const items=await searchCombinedCatalog(query);
+      if(items.length){
+        const best=items[0];
+        const titleScore=tokenOverlap(b.title,best?.volumeInfo?.title||"");
+        if(titleScore>=0.45 || normText(best?.volumeInfo?.title||"").includes(normText(b.title))){
+          applyGoogleMetadata(b,best);
+        }else{
+          b.metadataError="Résultat automatique incertain · à vérifier";
+          b.metadataCheckedAt=new Date().toISOString();
+        }
+      }else{
+        b.metadataError="Aucun résultat automatique · à vérifier";
+        b.metadataCheckedAt=new Date().toISOString();
+      }
+    }catch(e){
+      // A bulk import must never block the library if a public catalogue is temporarily unavailable.
+      b.metadataError="";
+    }
+    save(); render();
+    await waitMs(900);
+  }
+}
+setTimeout(enrichImportedBuyBooks,1800);
+
 function openAdd(){ document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
 function closeAdd(){ document.getElementById("addModal").classList.remove("open"); document.getElementById("results").innerHTML=""; }
 
@@ -1123,7 +1260,7 @@ async function searchBooks(){
 }
 
 function chooseResult(data){
-  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",source:"",why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
+  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",quantity:1,addedAt:new Date().toISOString(),source:"",why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
   books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
 }
 
@@ -1136,7 +1273,7 @@ function openBook(id){
         <h2 class="detail-title">${esc(b.title)}</h2>
         <div class="meta">${esc(b.author||"")}<br>${[b.publisher,b.year,b.pages?b.pages+" pages":"",b.category,b.isbn?"ISBN "+b.isbn:""].filter(Boolean).map(esc).join(" · ")}</div>
         ${b.rating?`<div class="stars">${"★".repeat(b.rating)}${"☆".repeat(5-b.rating)}</div>`:""}
-        <span class="badge">${esc(b.status)}</span>
+        <span class="badge">${esc(b.status)}${b.status==="À acheter"&&Number(b.quantity)>1?" · ×"+Number(b.quantity):""}</span>
       </div>
     </div>
     ${(()=>{const ms=metadataState(b);return ms.kind==="ok"?"":`<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
@@ -1149,6 +1286,14 @@ function openBook(id){
     ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
     ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
+    ${b.status==="À acheter" && (b.purchaseNote || Number(b.quantity)>1 || b.format)?`<div class="block">
+      <h3>À acheter</h3>
+      <div class="reading-list">
+        ${Number(b.quantity)>1?`<div class="reading-item"><div class="reading-label">Quantité</div><div class="reading-value">${Number(b.quantity)}</div></div>`:""}
+        ${b.format?`<div class="reading-item"><div class="reading-label">Format prévu</div><div class="reading-value">${esc(displayFormat(b.format))}</div></div>`:""}
+        ${b.purchaseNote?`<div class="reading-item"><div class="reading-label">Note</div><div class="reading-value">${esc(b.purchaseNote)}</div></div>`:""}
+      </div>
+    </div>`:""}
     <div class="block">
       <h3>Ma lecture</h3>
       <div class="reading-list">
@@ -1354,6 +1499,10 @@ function editBook(id){
     <div class="field"><label>Recommandé pour</label><input id="fRecommend" value="${esc(b.recommendTo||"")}" placeholder="Ex. Laurène, Joseph…"></div>
     <div class="field"><label>Prêté à</label><input id="fLoaned" value="${esc(b.loanedTo||"")}" placeholder="Laisser vide si le livre n’est pas prêté"></div>
     <div class="row">
+      <div class="field"><label>Quantité à acheter</label><input id="fQuantity" type="number" min="1" value="${esc(b.quantity||1)}"></div>
+      <div class="field"><label>Note d’achat</label><input id="fPurchaseNote" value="${esc(b.purchaseNote||"")}" placeholder="Ex. Kindle, version anglaise…"></div>
+    </div>
+    <div class="row">
       <div class="field"><label>Commencé le</label><input type="date" id="fStarted" value="${esc(b.started||"")}"></div>
       <div class="field"><label>Terminé le</label><input type="date" id="fFinished" value="${esc(b.finished||"")}"></div>
     </div>
@@ -1378,7 +1527,9 @@ function saveEdit(id){
     coverQualityVersion:(fCover.value.trim()!==b.cover)?"manual":(b.coverQualityVersion||""),
     description:fDescription.value.trim(),source:fSource.value,rating:Number(fRating.value)||0,why:fWhy.value.trim(),
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
-    recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
+    recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),
+    quantity:Math.max(1,Number(fQuantity.value)||1),purchaseNote:fPurchaseNote.value.trim(),
+    started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
   });
   if(bibliographicChanged){
     b.editionLocked=true;
