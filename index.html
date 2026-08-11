@@ -73,6 +73,8 @@
   .metadata-status.ok{background:#e4efe3}
   .metadata-status.warning{background:#f5e9c9}
   .metadata-status.error{background:#f4d9d7}
+  .retrybtn{width:100%;margin-top:10px;border:1px solid var(--line);background:white;border-radius:12px;padding:10px 12px;font-weight:650}
+  .retrybtn:disabled{opacity:.55}
 </style>
 </head>
 <body>
@@ -138,15 +140,72 @@
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 
-function googleBooksUrl(query, maxResults=8){
+function googleBooksUrl(query, maxResults=20){
   const params = new URLSearchParams({
     q: query,
     maxResults: String(maxResults),
     printType: "books",
     projection: "full",
+    orderBy: "relevance",
     key: GOOGLE_BOOKS_API_KEY
   });
   return `${GOOGLE_BOOKS_URL}?${params.toString()}`;
+}
+
+function normText(value=""){
+  return String(value)
+    .replace(/œ/gi,"oe")
+    .replace(/æ/gi,"ae")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[’'`´]/g," ")
+    .replace(/[^a-z0-9]+/g," ")
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function exactPhrase(value=""){
+  return String(value).replace(/["\\]/g," ").trim();
+}
+
+function tokenOverlap(a,b){
+  const A=new Set(normText(a).split(" ").filter(x=>x.length>1));
+  const B=new Set(normText(b).split(" ").filter(x=>x.length>1));
+  if(!A.size || !B.size) return 0;
+  let common=0;
+  A.forEach(x=>{if(B.has(x)) common++});
+  return common / Math.max(A.size,B.size);
+}
+
+function scoreGoogleItem(item,title,author=""){
+  const v=item.volumeInfo||{};
+  const wantedTitle=normText(title);
+  const gotTitle=normText(v.title||"");
+  const wantedAuthor=normText(author);
+  const gotAuthor=normText((v.authors||[]).join(" "));
+  let score=0;
+
+  if(gotTitle===wantedTitle) score+=60;
+  else if(gotTitle.includes(wantedTitle)||wantedTitle.includes(gotTitle)) score+=38;
+  else score+=Math.round(tokenOverlap(title,v.title||"")*30);
+
+  if(wantedAuthor){
+    if(gotAuthor===wantedAuthor) score+=40;
+    else if(gotAuthor.includes(wantedAuthor)||wantedAuthor.includes(gotAuthor)) score+=28;
+    else{
+      const last=wantedAuthor.split(" ").filter(Boolean).pop();
+      if(last && gotAuthor.split(" ").includes(last)) score+=22;
+      score+=Math.round(tokenOverlap(author,(v.authors||[]).join(" "))*15);
+    }
+  }
+
+  if(v.language==="fr") score+=3;
+  if(v.publisher) score+=2;
+  if(v.pageCount) score+=2;
+  if(v.description) score+=2;
+  if(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail) score+=4;
+  if((v.industryIdentifiers||[]).length) score+=2;
+  return score;
 }
 
 function missingMetadata(b){
@@ -164,8 +223,8 @@ function missingMetadata(b){
 
 function metadataState(b){
   const missing = missingMetadata(b);
-  if(b.metadataError) return {kind:"error", text:"Google Books n’a pas pu compléter cette fiche. À vérifier manuellement."};
-  if(missing.length) return {kind:"warning", text:"Informations à compléter : "+missing.join(", ")+"."};
+  if(b.metadataError) return {kind:"error", text:"Google Books : "+b.metadataError+(missing.length?" · À compléter : "+missing.join(", ")+".":"")};
+  if(missing.length) return {kind:"warning", text:"Informations Google Books incomplètes : "+missing.join(", ")+". Tu peux réessayer ou compléter manuellement."};
   return {kind:"ok", text:"Métadonnées Google Books complètes."};
 }
 
@@ -240,44 +299,69 @@ function render(){
 }
 render();
 
+async function googleBooksRequest(query,maxResults=20){
+  const r=await fetch(googleBooksUrl(query,maxResults),{
+    method:"GET",
+    headers:{"Accept":"application/json"}
+  });
+  let d={};
+  try{ d=await r.json(); }catch(_){}
+  if(!r.ok){
+    const googleMessage=d?.error?.message || `HTTP ${r.status}`;
+    throw new Error(`${r.status} — ${googleMessage}`);
+  }
+  return d.items||[];
+}
+
 async function fetchGoogleBook(title, author=""){
   if(!GOOGLE_BOOKS_API_KEY || GOOGLE_BOOKS_API_KEY==="COLLE_TA_CLE_ICI"){
-    throw new Error("Clé Google Books absente");
+    throw new Error("clé API absente");
   }
 
-  const precise = `intitle:${title}${author?` inauthor:${author}`:""}`;
-  let r = await fetch(googleBooksUrl(precise, 10));
-  if(!r.ok) throw new Error(`Google Books HTTP ${r.status}`);
-  let d = await r.json();
-  let items = d.items || [];
+  const t=exactPhrase(title);
+  const a=exactPhrase(author);
 
+  // Google Books traite les termes séparés comme des AND.
+  // On commence donc par des expressions exactes entre guillemets,
+  // puis on élargit progressivement si nécessaire.
+  const queries=[
+    a ? `intitle:"${t}" inauthor:"${a}"` : `intitle:"${t}"`,
+    a ? `"${t}" "${a}"` : `"${t}"`,
+    `intitle:"${t}"`,
+    `"${t}"`,
+    a ? `${t} ${a}` : t
+  ];
+
+  const uniqueQueries=[...new Set(queries.filter(Boolean))];
+  const found=new Map();
+  let lastError="";
+
+  for(const query of uniqueQueries){
+    try{
+      const items=await googleBooksRequest(query,20);
+      for(const item of items){
+        if(item?.id && !found.has(item.id)) found.set(item.id,item);
+      }
+      // Si on a déjà plusieurs candidats, le scoring ci-dessous suffit.
+      if(found.size>=8) break;
+    }catch(e){
+      lastError=e.message||"erreur inconnue";
+      // 403/400 = problème d'autorisation/requête : inutile d'enchaîner 5 appels identiques.
+      if(/^40[03]\b/.test(lastError)) throw e;
+    }
+  }
+
+  const items=[...found.values()];
   if(!items.length){
-    r = await fetch(googleBooksUrl(`${title} ${author}`.trim(), 10));
-    if(!r.ok) throw new Error(`Google Books HTTP ${r.status}`);
-    d = await r.json();
-    items = d.items || [];
+    if(lastError) throw new Error(lastError);
+    return null;
   }
-  if(!items.length) return null;
 
-  const norm = x => String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
-  const nt = norm(title);
-  const na = norm(author);
-  const scored = items.map(item=>{
-    const v=item.volumeInfo||{};
-    const t=norm(v.title);
-    const a=norm((v.authors||[]).join(" "));
-    let score=0;
-    if(t===nt) score+=10;
-    else if(t.includes(nt)||nt.includes(t)) score+=6;
-    if(na && a.includes(na)) score+=8;
-    if(v.publisher) score+=1;
-    if(v.pageCount) score+=1;
-    if(v.description) score+=1;
-    if(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail) score+=2;
-    return {item,score};
-  }).sort((a,b)=>b.score-a.score);
+  const ranked=items
+    .map(item=>({item,score:scoreGoogleItem(item,title,author)}))
+    .sort((x,y)=>y.score-x.score);
 
-  return scored[0].item;
+  return ranked[0].item;
 }
 
 function applyGoogleMetadata(b,item){
@@ -304,15 +388,15 @@ async function enrichSeedBooks(){
     try{
       const item=await fetchGoogleBook(b.title,b.author);
       if(item) applyGoogleMetadata(b,item);
-      else b.metadataError="Aucun résultat Google Books";
+      else b.metadataError="aucun résultat pertinent trouvé";
     }catch(e){
-      b.metadataError=e.message || "Erreur Google Books";
+      b.metadataError=e.message || "erreur inconnue";
     }
     save(); render();
-    await new Promise(r=>setTimeout(r,150));
+    await new Promise(r=>setTimeout(r,300));
   }
 }
-setTimeout(enrichSeedBooks,300);
+setTimeout(enrichSeedBooks,500);
 
 function openAdd(){ document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
 function closeAdd(){ document.getElementById("addModal").classList.remove("open"); document.getElementById("results").innerHTML=""; }
@@ -322,30 +406,31 @@ async function searchBooks(){
   const box=document.getElementById("results");
   if(!q)return;
   if(!GOOGLE_BOOKS_API_KEY || GOOGLE_BOOKS_API_KEY==="COLLE_TA_CLE_ICI"){
-    box.innerHTML='<div class="metadata-status error">Clé Google Books absente. Remplace COLLE_TA_CLE_ICI dans index.html.</div>';
+    box.innerHTML='<div class="metadata-status error">Clé Google Books absente.</div>';
     return;
   }
   box.innerHTML='<div class="notice">Recherche Google Books…</div>';
   try{
-    const r=await fetch(googleBooksUrl(q,10));
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d=await r.json();
-    if(!d.items?.length){ box.innerHTML='<div class="metadata-status warning">Aucun résultat Google Books. Essaie avec le titre et le nom de l’auteur.</div>'; return; }
-    box.innerHTML=d.items.map(item=>{
+    const items=await googleBooksRequest(q,20);
+    if(!items.length){
+      box.innerHTML='<div class="metadata-status warning">Aucun résultat Google Books. Essaie avec le titre exact et le nom de l’auteur.</div>';
+      return;
+    }
+    box.innerHTML=items.map(item=>{
       const v=item.volumeInfo||{};
       const img=(v.imageLinks?.extraLarge||v.imageLinks?.large||v.imageLinks?.medium||v.imageLinks?.small||v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
       return `<div class="result" onclick='chooseResult(${JSON.stringify({
         title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
         pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img,
         isbn:(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "",
-        googleBooksId:item.id||"", metadataCheckedAt:new Date().toISOString()
+        googleBooksId:item.id||"", metadataCheckedAt:new Date().toISOString(), metadataError:""
       }).replace(/'/g,"&#39;")})'>
-        ${img?`<img src="${esc(img)}">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
+        ${img?`<img src="${esc(img)}" onerror="this.style.visibility='hidden'">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
         <div><strong>${esc(v.title||"Sans titre")}</strong><small>${esc((v.authors||[]).join(", "))}<br>${esc(v.publisher||"")}${v.publishedDate?" · "+esc(v.publishedDate):""}${v.pageCount?" · "+v.pageCount+" p.":""}</small></div>
       </div>`;
     }).join("");
   }catch(e){
-    box.innerHTML=`<div class="metadata-status error">Google Books n’a pas répondu (${esc(e.message||"erreur")}). Rien n’a été ajouté. Réessaie ou complète le livre manuellement.</div>`;
+    box.innerHTML=`<div class="metadata-status error">Erreur Google Books : ${esc(e.message||"erreur inconnue")}</div>`;
   }
 }
 
@@ -368,6 +453,7 @@ function openBook(id){
       </div>
     </div>
     ${(()=>{const ms=metadataState(b);return `<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
+    ${missingMetadata(b).length?`<button class="retrybtn" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer Google Books</button>`:""}
     ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
     ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
@@ -380,6 +466,26 @@ function openBook(id){
       <button class="ghost" onclick="closeEdit()">Fermer</button>
     </div>`;
   document.getElementById("editModal").classList.add("open");
+}
+
+async function retryGoogleMetadata(id,button){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  const original=button?.textContent||"";
+  if(button){button.disabled=true;button.textContent="Recherche Google Books…";}
+  b.metadataError="";
+  save();
+  try{
+    const item=await fetchGoogleBook(b.title,b.author);
+    if(item){
+      applyGoogleMetadata(b,item);
+    }else{
+      b.metadataError="aucun résultat pertinent trouvé";
+    }
+  }catch(e){
+    b.metadataError=e.message||"erreur inconnue";
+  }
+  save(); render(); openBook(id);
+  if(button){button.disabled=false;button.textContent=original;}
 }
 
 function closeEdit(){document.getElementById("editModal").classList.remove("open")}
@@ -400,6 +506,7 @@ function editBook(id){
     </div>
     <div class="field"><label>Genre / thème</label><input id="fCategory" value="${esc(b.category||"")}"></div>
     <div class="field"><label>ISBN</label><input id="fIsbn" value="${esc(b.isbn||"")}"></div>
+    <div class="field"><label>URL de couverture</label><input id="fCover" value="${esc(b.cover||"")}" placeholder="À compléter seulement si Google Books ne trouve pas la couverture"></div>
     <div class="field"><label>Résumé</label><textarea id="fDescription">${esc(stripHtml(b.description||""))}</textarea></div>
     <div class="row">
       <div class="field"><label>Source</label><select id="fSource">
@@ -431,7 +538,7 @@ function saveEdit(id){
   const b=books.find(x=>x.id===id); if(!b)return;
   Object.assign(b,{
     title:fTitle.value.trim(),author:fAuthor.value.trim(),status:fStatus.value,pages:Number(fPages.value)||"",
-    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),
+    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),cover:fCover.value.trim(),
     description:fDescription.value.trim(),source:fSource.value,rating:Number(fRating.value)||0,why:fWhy.value.trim(),
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
