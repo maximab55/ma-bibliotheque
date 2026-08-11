@@ -69,6 +69,10 @@
   .toolbar{display:flex;gap:8px;margin-top:20px}
   .toolbar button{flex:1}
   .notice{font-size:12px;color:var(--muted);line-height:1.4}
+  .metadata-status{margin-top:12px;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.35}
+  .metadata-status.ok{background:#e4efe3}
+  .metadata-status.warning{background:#f5e9c9}
+  .metadata-status.error{background:#f4d9d7}
 </style>
 </head>
 <body>
@@ -131,6 +135,40 @@
 </div>
 
 <script>
+const GOOGLE_BOOKS_API_KEY = "COLLE_TA_CLE_ICI";
+const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
+
+function googleBooksUrl(query, maxResults=8){
+  const params = new URLSearchParams({
+    q: query,
+    maxResults: String(maxResults),
+    printType: "books",
+    projection: "full",
+    key: GOOGLE_BOOKS_API_KEY
+  });
+  return `${GOOGLE_BOOKS_URL}?${params.toString()}`;
+}
+
+function missingMetadata(b){
+  const fields = [
+    ["auteur", b.author],
+    ["couverture", b.cover],
+    ["éditeur", b.publisher],
+    ["année", b.year],
+    ["nombre de pages", b.pages],
+    ["genre / thème", b.category],
+    ["résumé", b.description]
+  ];
+  return fields.filter(([,value])=>!value).map(([label])=>label);
+}
+
+function metadataState(b){
+  const missing = missingMetadata(b);
+  if(b.metadataError) return {kind:"error", text:"Google Books n’a pas pu compléter cette fiche. À vérifier manuellement."};
+  if(missing.length) return {kind:"warning", text:"Informations à compléter : "+missing.join(", ")+"."};
+  return {kind:"ok", text:"Métadonnées Google Books complètes."};
+}
+
 const seed = [
   {id:"seed1",title:"Vingt-quatre heures dans la vie d'une femme",author:"Stefan Zweig",status:"Lu",rating:5,started:"2026-06-23",finished:"2026-07-21",readingDays:28,review:"J’ai adoré l’histoire, l’écriture, la French Riviera. Tout.",format:"Kindle",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
   {id:"seed2",title:"Le Petit Prince",author:"Antoine de Saint-Exupéry",status:"Lu",rating:3,started:"2026-06-27",finished:"2026-07-04",readingDays:7,review:"Bien mais pas aussi fou que les gens en parlent. Pour moi rien de dingue, juste un petit essai sur le fait de profiter de la vie et de ses proches. Écriture que je n’ai pas particulièrement appréciée.",format:"Livre papier",owner:"À moi",loanedTo:"",recommendTo:"",publisher:"",year:"",pages:"",category:"",description:"",cover:""},
@@ -202,33 +240,76 @@ function render(){
 }
 render();
 
+async function fetchGoogleBook(title, author=""){
+  if(!GOOGLE_BOOKS_API_KEY || GOOGLE_BOOKS_API_KEY==="COLLE_TA_CLE_ICI"){
+    throw new Error("Clé Google Books absente");
+  }
+
+  const precise = `intitle:${title}${author?` inauthor:${author}`:""}`;
+  let r = await fetch(googleBooksUrl(precise, 10));
+  if(!r.ok) throw new Error(`Google Books HTTP ${r.status}`);
+  let d = await r.json();
+  let items = d.items || [];
+
+  if(!items.length){
+    r = await fetch(googleBooksUrl(`${title} ${author}`.trim(), 10));
+    if(!r.ok) throw new Error(`Google Books HTTP ${r.status}`);
+    d = await r.json();
+    items = d.items || [];
+  }
+  if(!items.length) return null;
+
+  const norm = x => String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const nt = norm(title);
+  const na = norm(author);
+  const scored = items.map(item=>{
+    const v=item.volumeInfo||{};
+    const t=norm(v.title);
+    const a=norm((v.authors||[]).join(" "));
+    let score=0;
+    if(t===nt) score+=10;
+    else if(t.includes(nt)||nt.includes(t)) score+=6;
+    if(na && a.includes(na)) score+=8;
+    if(v.publisher) score+=1;
+    if(v.pageCount) score+=1;
+    if(v.description) score+=1;
+    if(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail) score+=2;
+    return {item,score};
+  }).sort((a,b)=>b.score-a.score);
+
+  return scored[0].item;
+}
+
+function applyGoogleMetadata(b,item){
+  if(!item) return;
+  const v=item.volumeInfo||{};
+  const apiCover=(v.imageLinks?.extraLarge||v.imageLinks?.large||v.imageLinks?.medium||v.imageLinks?.small||v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
+  const stableCover=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : "";
+  b.author=b.author || (v.authors||[]).join(", ");
+  b.publisher=b.publisher || v.publisher || "";
+  b.year=b.year || (v.publishedDate||"").slice(0,4);
+  b.pages=b.pages || v.pageCount || "";
+  b.category=b.category || (v.categories||[])[0] || "";
+  b.description=b.description || v.description || "";
+  b.isbn=b.isbn || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
+  b.cover=b.cover || apiCover || stableCover;
+  b.googleBooksId=item.id || b.googleBooksId || "";
+  b.metadataError="";
+  b.metadataCheckedAt=new Date().toISOString();
+}
+
 async function enrichSeedBooks(){
-  const pending=books.filter(b=>b.id.startsWith("seed") && (!b.cover || !b.publisher || !b.pages));
+  const pending=books.filter(b=>b.id.startsWith("seed") && missingMetadata(b).length);
   for(const b of pending){
     try{
-      const q=`intitle:"${b.title}"${b.author?` inauthor:"${b.author}"`:""}`;
-      const r=await fetch("https://www.googleapis.com/books/v1/volumes?q="+encodeURIComponent(q)+"&maxResults=5");
-      const d=await r.json();
-      const items=d.items||[];
-      const item=items.find(x=>{
-        const v=x.volumeInfo||{};
-        const a=(v.authors||[]).join(" ").toLowerCase();
-        return !b.author || a.includes(b.author.split(" ").slice(-1)[0].toLowerCase());
-      }) || items[0];
-      if(!item) continue;
-      const v=item.volumeInfo||{};
-      b.author=b.author || (v.authors||[]).join(", ");
-      b.publisher=b.publisher || v.publisher || "";
-      b.year=b.year || (v.publishedDate||"").slice(0,4);
-      b.pages=b.pages || v.pageCount || "";
-      b.category=b.category || (v.categories||[])[0] || "";
-      b.description=b.description || v.description || "";
-      const apiCover=(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
-      const stableCover=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : "";
-      b.cover=b.cover || stableCover || apiCover;
-      save(); render();
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,120));
+      const item=await fetchGoogleBook(b.title,b.author);
+      if(item) applyGoogleMetadata(b,item);
+      else b.metadataError="Aucun résultat Google Books";
+    }catch(e){
+      b.metadataError=e.message || "Erreur Google Books";
+    }
+    save(); render();
+    await new Promise(r=>setTimeout(r,150));
   }
 }
 setTimeout(enrichSeedBooks,300);
@@ -240,25 +321,31 @@ async function searchBooks(){
   const q=document.getElementById("bookQuery").value.trim();
   const box=document.getElementById("results");
   if(!q)return;
-  box.innerHTML='<div class="notice">Recherche…</div>';
+  if(!GOOGLE_BOOKS_API_KEY || GOOGLE_BOOKS_API_KEY==="COLLE_TA_CLE_ICI"){
+    box.innerHTML='<div class="metadata-status error">Clé Google Books absente. Remplace COLLE_TA_CLE_ICI dans index.html.</div>';
+    return;
+  }
+  box.innerHTML='<div class="notice">Recherche Google Books…</div>';
   try{
-    const r=await fetch("https://www.googleapis.com/books/v1/volumes?q="+encodeURIComponent(q)+"&maxResults=8");
+    const r=await fetch(googleBooksUrl(q,10));
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
-    if(!d.items?.length){ box.innerHTML='<div class="notice">Aucun résultat. Essaie avec le nom de l’auteur.</div>'; return; }
-    box.innerHTML=d.items.map((item,i)=>{
+    if(!d.items?.length){ box.innerHTML='<div class="metadata-status warning">Aucun résultat Google Books. Essaie avec le titre et le nom de l’auteur.</div>'; return; }
+    box.innerHTML=d.items.map(item=>{
       const v=item.volumeInfo||{};
-      const apiImg=(v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
-      const img=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : apiImg;
+      const img=(v.imageLinks?.extraLarge||v.imageLinks?.large||v.imageLinks?.medium||v.imageLinks?.small||v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
       return `<div class="result" onclick='chooseResult(${JSON.stringify({
         title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
-        pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img
+        pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img,
+        isbn:(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "",
+        googleBooksId:item.id||"", metadataCheckedAt:new Date().toISOString()
       }).replace(/'/g,"&#39;")})'>
         ${img?`<img src="${esc(img)}">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
         <div><strong>${esc(v.title||"Sans titre")}</strong><small>${esc((v.authors||[]).join(", "))}<br>${esc(v.publisher||"")}${v.publishedDate?" · "+esc(v.publishedDate):""}${v.pageCount?" · "+v.pageCount+" p.":""}</small></div>
       </div>`;
     }).join("");
   }catch(e){
-    box.innerHTML='<div class="notice">La recherche Internet n’a pas répondu. Tu peux réessayer plus tard.</div>';
+    box.innerHTML=`<div class="metadata-status error">Google Books n’a pas répondu (${esc(e.message||"erreur")}). Rien n’a été ajouté. Réessaie ou complète le livre manuellement.</div>`;
   }
 }
 
@@ -275,11 +362,12 @@ function openBook(id){
       <div class="detail-cover">${b.cover?`<img src="${esc(b.cover)}">`:`<div class="placeholder">${esc(b.title)}</div>`}</div>
       <div>
         <h2 class="detail-title">${esc(b.title)}</h2>
-        <div class="meta">${esc(b.author||"")}<br>${[b.publisher,b.year,b.pages?b.pages+" pages":"",b.category].filter(Boolean).map(esc).join(" · ")}</div>
+        <div class="meta">${esc(b.author||"")}<br>${[b.publisher,b.year,b.pages?b.pages+" pages":"",b.category,b.isbn?"ISBN "+b.isbn:""].filter(Boolean).map(esc).join(" · ")}</div>
         ${b.rating?`<div class="stars">${"★".repeat(b.rating)}${"☆".repeat(5-b.rating)}</div>`:""}
         <span class="badge">${esc(b.status)}</span>
       </div>
     </div>
+    ${(()=>{const ms=metadataState(b);return `<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
     ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
     ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
@@ -311,6 +399,7 @@ function editBook(id){
       <div class="field"><label>Année</label><input id="fYear" value="${esc(b.year||"")}"></div>
     </div>
     <div class="field"><label>Genre / thème</label><input id="fCategory" value="${esc(b.category||"")}"></div>
+    <div class="field"><label>ISBN</label><input id="fIsbn" value="${esc(b.isbn||"")}"></div>
     <div class="field"><label>Résumé</label><textarea id="fDescription">${esc(stripHtml(b.description||""))}</textarea></div>
     <div class="row">
       <div class="field"><label>Source</label><select id="fSource">
@@ -342,7 +431,7 @@ function saveEdit(id){
   const b=books.find(x=>x.id===id); if(!b)return;
   Object.assign(b,{
     title:fTitle.value.trim(),author:fAuthor.value.trim(),status:fStatus.value,pages:Number(fPages.value)||"",
-    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),
+    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),
     description:fDescription.value.trim(),source:fSource.value,rating:Number(fRating.value)||0,why:fWhy.value.trim(),
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
