@@ -30,6 +30,23 @@
   .section-head h2{font-size:20px;margin:0}
   .section-tools{display:flex;align-items:center;gap:8px}
   .sort-select{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:7px 10px;font-size:12px;max-width:190px}
+  .summary-text.collapsed{
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:7;
+    overflow:hidden;
+  }
+  .summary-toggle{
+    margin-top:8px;
+    border:0;
+    background:transparent;
+    color:var(--ink);
+    padding:0;
+    font-size:14px;
+    font-weight:650;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
   @media(max-width:430px){
     .section-head{align-items:flex-start;gap:10px}
     .section-tools{flex-direction:column-reverse;align-items:flex-end;gap:5px}
@@ -142,7 +159,7 @@
     <h2 id="sectionTitle">Tous les livres</h2>
     <div class="section-tools">
       <select class="sort-select" id="sortSelect" onchange="changeSort(this.value)">
-        <option value="smart">En cours d’abord</option>
+        <option value="smart">En cours → Lus → À lire → À acheter</option>
         <option value="chronology">Chronologie de lecture</option>
         <option value="title">Titre A → Z</option>
         <option value="author">Auteur A → Z</option>
@@ -213,7 +230,7 @@
 
 
 <script>
-// Ma Bibliothèque V12 — tri + import liste À acheter
+// Ma Bibliothèque V13 — résumés extensibles + ordre En cours / Lus / À lire / À acheter
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -692,7 +709,7 @@ function readingDateKey(b){
 }
 
 function smartCompare(a,b){
-  const order={"En cours":0,"À lire":1,"À acheter":2,"Lu":3};
+  const order={"En cours":0,"Lu":1,"À lire":2,"À acheter":3};
   const sa=order[a.status] ?? 9, sb=order[b.status] ?? 9;
   if(sa!==sb) return sa-sb;
   if(a.status==="Lu"){
@@ -1264,6 +1281,17 @@ function chooseResult(data){
   books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
 }
 
+function summaryNeedsToggle(text=""){
+  return stripHtml(String(text||"")).trim().length > 520;
+}
+
+function toggleSummary(id,button){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const isCollapsed=el.classList.toggle("collapsed");
+  button.textContent=isCollapsed?"Lire la suite":"Réduire";
+}
+
 function openBook(id){
   const b=books.find(x=>x.id===id); if(!b)return;
   document.getElementById("editContent").innerHTML=`
@@ -1283,7 +1311,10 @@ function openBook(id){
     </div>
     ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement : priorité au français, aux éditions non poche et aux éditions les plus anciennes disponibles.</div>`:""}
     ${b.coverQuality&&b.coverQuality.startsWith("upscaled-")?`<div class="notice" style="margin-top:8px">Google Books ne fournit qu’une petite image pour cette édition. Une version agrandie est utilisée.</div>`:""}
-    ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
+    ${b.description?`<div class="block"><h3>Résumé</h3>
+      <p id="summary-${b.id}" class="summary-text ${summaryNeedsToggle(b.description)?"collapsed":""}">${esc(stripHtml(b.description))}</p>
+      ${summaryNeedsToggle(b.description)?`<button class="summary-toggle" onclick="toggleSummary('summary-${b.id}',this)">Lire la suite</button>`:""}
+    </div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
     ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
     ${b.status==="À acheter" && (b.purchaseNote || Number(b.quantity)>1 || b.format)?`<div class="block">
