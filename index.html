@@ -75,6 +75,20 @@
   .metadata-status.error{background:#f4d9d7}
   .retrybtn{width:100%;margin-top:10px;border:1px solid var(--line);background:white;border-radius:12px;padding:10px 12px;font-weight:650}
   .retrybtn:disabled{opacity:.55}
+  .edition-actions{display:flex;gap:8px;margin-top:10px}
+  .edition-actions button{flex:1}
+  .edition-list{display:grid;gap:10px;margin-top:12px}
+  .edition-card{display:grid;grid-template-columns:72px 1fr;gap:12px;border:1px solid var(--line);background:white;border-radius:15px;padding:10px;cursor:pointer}
+  .edition-card.current{outline:2px solid var(--ink)}
+  .edition-cover{width:72px;aspect-ratio:2/3;border-radius:7px;overflow:hidden;background:#ddd3c5}
+  .edition-cover img{width:100%;height:100%;object-fit:cover}
+  .edition-title{font-weight:750;line-height:1.2}
+  .edition-meta{font-size:12px;color:var(--muted);line-height:1.45;margin-top:5px}
+  .edition-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+  .edition-tag{font-size:10px;padding:4px 7px;border-radius:999px;background:var(--chip)}
+  .edition-tag.recommended{background:var(--green);font-weight:700}
+  .edition-tag.pocket{background:var(--sand)}
+  .edition-tag.current{background:var(--blue);font-weight:700}
 </style>
 </head>
 <body>
@@ -133,6 +147,16 @@
   <div class="sheet">
     <div class="grab"></div>
     <div id="editContent"></div>
+  </div>
+</div>
+
+<div class="modal" id="editionModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2>Changer d’édition</h2>
+    <p class="notice">Je privilégie automatiquement les éditions françaises non poche et les dates de publication les plus anciennes trouvées dans Google Books. Tu peux choisir n’importe quelle autre édition ci-dessous.</p>
+    <div id="editionContent"></div>
+    <div class="toolbar"><button class="ghost" onclick="closeEditionChooser()">Fermer</button></div>
   </div>
 </div>
 
@@ -209,6 +233,82 @@ function scoreGoogleItem(item,title,author=""){
 }
 
 
+const POCKET_MARKERS = [
+  "le livre de poche","livre de poche","pocket","folio","j ai lu","jai lu",
+  "points","10 18","babel","gf flammarion","flammarion poche",
+  "folio classique","folio junior","poche"
+];
+
+function editionYear(item){
+  const d=item?.volumeInfo?.publishedDate||"";
+  const y=parseInt(String(d).slice(0,4),10);
+  return Number.isFinite(y)?y:null;
+}
+
+function isPocketEdition(item){
+  const v=item?.volumeInfo||{};
+  const hay=normText([
+    v.publisher||"",
+    v.title||"",
+    v.subtitle||""
+  ].join(" "));
+  return POCKET_MARKERS.some(marker=>hay.includes(normText(marker)));
+}
+
+function editionIsFrench(item){
+  return (item?.volumeInfo?.language||"").toLowerCase()==="fr";
+}
+
+function editionIsRelevant(item,title,author=""){
+  const base=scoreGoogleItem(item,title,author);
+  const titleOverlap=tokenOverlap(title,item?.volumeInfo?.title||"");
+  const gotAuthor=normText((item?.volumeInfo?.authors||[]).join(" "));
+  const wantedAuthor=normText(author);
+  const authorOK=!wantedAuthor || gotAuthor.includes(wantedAuthor) ||
+    tokenOverlap(author,(item?.volumeInfo?.authors||[]).join(" "))>=0.45;
+  return base>=38 && titleOverlap>=0.45 && authorOK;
+}
+
+function rankEditionItems(items,title,author=""){
+  let relevant=items.filter(item=>editionIsRelevant(item,title,author));
+  if(!relevant.length) relevant=items.slice();
+
+  const frenchYears=relevant
+    .filter(editionIsFrench)
+    .map(editionYear)
+    .filter(Boolean);
+  const anyYears=relevant.map(editionYear).filter(Boolean);
+  const earliestYear=frenchYears.length?Math.min(...frenchYears):(anyYears.length?Math.min(...anyYears):null);
+
+  return relevant.map(item=>{
+    const v=item.volumeInfo||{};
+    const year=editionYear(item);
+    const pocket=isPocketEdition(item);
+    let score=scoreGoogleItem(item,title,author);
+
+    if(editionIsFrench(item)) score+=16;
+    else if(v.language) score-=5;
+
+    if(pocket) score-=32;
+    else if(v.publisher) score+=9;
+
+    if(year && earliestYear){
+      const delta=Math.max(0,year-earliestYear);
+      score+=Math.max(0,24-Math.min(delta,24));
+    }
+
+    const cd=coverDataFromGoogleItem(item);
+    if(cd.quality==="extraLarge") score+=9;
+    else if(cd.quality==="large") score+=7;
+    else if(cd.quality==="medium") score+=5;
+    else if(cd.cover) score+=2;
+
+    return {item,score,pocket,year,coverData:cd};
+  }).sort((a,b)=>b.score-a.score);
+}
+
+
+
 function isGoogleBooksCover(url=""){
   return /(^|\/\/)(books|books\.google)\.google\./i.test(url) || /books\.google\./i.test(url);
 }
@@ -279,7 +379,7 @@ function coverDataFromGoogleItem(item){
 
 function coverNeedsUpgrade(b){
   if(!b.cover) return true;
-  if(b.coverQualityVersion!=="v5") return true;
+  if(b.coverQualityVersion!=="v6") return true;
   if(/edge=curl/i.test(b.cover)) return true;
   const m=String(b.cover).match(/[?&]zoom=(\d+)/i);
   if(isGoogleBooksCover(b.cover) && m && Number(m[1])<4) return true;
@@ -353,6 +453,16 @@ let books = [
       pages: old.pages || fresh.pages,
       category: old.category || fresh.category,
       description: old.description || fresh.description,
+      isbn: old.isbn || fresh.isbn || "",
+      publishedDate: old.publishedDate || fresh.publishedDate || "",
+      googleBooksId: old.googleBooksId || fresh.googleBooksId || "",
+      coverFallback: old.coverFallback || fresh.coverFallback || "",
+      coverQuality: old.coverQuality || fresh.coverQuality || "",
+      coverQualityVersion: old.coverQualityVersion || fresh.coverQualityVersion || "",
+      editionLanguage: old.editionLanguage || fresh.editionLanguage || "",
+      editionLocked: Boolean(old.editionLocked || fresh.editionLocked),
+      editionSelection: old.editionSelection || fresh.editionSelection || "",
+      editionVersion: old.editionVersion || fresh.editionVersion || "",
       loanedTo: old.loanedTo || fresh.loanedTo,
       recommendTo: old.recommendTo || fresh.recommendTo
     };
@@ -407,22 +517,17 @@ async function googleBooksRequest(query,maxResults=20){
   return d.items||[];
 }
 
-async function fetchGoogleBook(title, author=""){
+async function fetchEditionCandidates(title, author=""){
   if(!GOOGLE_BOOKS_API_KEY || GOOGLE_BOOKS_API_KEY==="COLLE_TA_CLE_ICI"){
     throw new Error("clé API absente");
   }
 
   const t=exactPhrase(title);
   const a=exactPhrase(author);
-
-  // Google Books traite les termes séparés comme des AND.
-  // On commence donc par des expressions exactes entre guillemets,
-  // puis on élargit progressivement si nécessaire.
   const queries=[
     a ? `intitle:"${t}" inauthor:"${a}"` : `intitle:"${t}"`,
     a ? `"${t}" "${a}"` : `"${t}"`,
     `intitle:"${t}"`,
-    `"${t}"`,
     a ? `${t} ${a}` : t
   ];
 
@@ -436,11 +541,9 @@ async function fetchGoogleBook(title, author=""){
       for(const item of items){
         if(item?.id && !found.has(item.id)) found.set(item.id,item);
       }
-      // Si on a déjà plusieurs candidats, le scoring ci-dessous suffit.
-      if(found.size>=8) break;
+      if(found.size>=12) break;
     }catch(e){
       lastError=e.message||"erreur inconnue";
-      // 403/400 = problème d'autorisation/requête : inutile d'enchaîner 5 appels identiques.
       if(/^40[03]\b/.test(lastError)) throw e;
     }
   }
@@ -448,14 +551,15 @@ async function fetchGoogleBook(title, author=""){
   const items=[...found.values()];
   if(!items.length){
     if(lastError) throw new Error(lastError);
-    return null;
+    return [];
   }
 
-  const ranked=items
-    .map(item=>({item,score:scoreGoogleItem(item,title,author)}))
-    .sort((x,y)=>y.score-x.score);
+  return rankEditionItems(items,title,author);
+}
 
-  return ranked[0].item;
+async function fetchGoogleBook(title, author=""){
+  const ranked=await fetchEditionCandidates(title,author);
+  return ranked[0]?.item || null;
 }
 
 function applyGoogleMetadata(b,item){
@@ -463,30 +567,74 @@ function applyGoogleMetadata(b,item){
   const v=item.volumeInfo||{};
   const coverData=coverDataFromGoogleItem(item);
 
-  b.author=b.author || (v.authors||[]).join(", ");
-  b.publisher=b.publisher || v.publisher || "";
-  b.year=b.year || (v.publishedDate||"").slice(0,4);
-  b.pages=b.pages || v.pageCount || "";
-  b.category=b.category || (v.categories||[])[0] || "";
-  b.description=b.description || v.description || "";
-  b.isbn=b.isbn || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
+  // Personal data is never touched here. Only bibliographic metadata is refreshed.
+  if(!b.editionLocked){
+    if((v.authors||[]).length) b.author=(v.authors||[]).join(", ");
+    b.publisher=v.publisher||"";
+    b.publishedDate=v.publishedDate||"";
+    b.year=(v.publishedDate||"").slice(0,4);
+    b.pages=v.pageCount||"";
+    b.category=(v.categories||[])[0]||"";
+    b.description=v.description||"";
+    b.isbn=(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier ||
+      (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
+  }else{
+    b.author=b.author || (v.authors||[]).join(", ");
+    b.publisher=b.publisher || v.publisher || "";
+    b.publishedDate=b.publishedDate || v.publishedDate || "";
+    b.year=b.year || (v.publishedDate||"").slice(0,4);
+    b.pages=b.pages || v.pageCount || "";
+    b.category=b.category || (v.categories||[])[0] || "";
+    b.description=b.description || v.description || "";
+    b.isbn=b.isbn || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier ||
+      (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
+  }
 
-  // Upgrade Google Books covers automatically, but do not overwrite
-  // a manually supplied non-Google image.
-  if(!b.cover || isGoogleBooksCover(b.cover) || b.googleBooksId){
+  // Keep a genuinely manual non-Google cover. Otherwise use the chosen edition cover.
+  if(!b.cover || isGoogleBooksCover(b.cover) || b.googleBooksId || !b.editionLocked){
     if(coverData.cover) b.cover=coverData.cover;
     b.coverFallback=coverData.fallback||"";
     b.coverQuality=coverData.quality||"";
-    b.coverQualityVersion="v5";
+    b.coverQualityVersion="v6";
   }
 
   b.googleBooksId=item.id || b.googleBooksId || "";
+  b.editionLanguage=v.language||"";
+  b.editionSelection=b.editionLocked?"manual":"auto";
+  b.editionVersion="v6";
+  b.metadataError="";
+  b.metadataCheckedAt=new Date().toISOString();
+}
+
+function applySelectedEdition(b,item){
+  if(!item) return;
+  const v=item.volumeInfo||{};
+  const cd=coverDataFromGoogleItem(item);
+
+  if((v.authors||[]).length) b.author=(v.authors||[]).join(", ");
+  b.publisher=v.publisher||"";
+  b.publishedDate=v.publishedDate||"";
+  b.year=(v.publishedDate||"").slice(0,4);
+  b.pages=v.pageCount||"";
+  b.category=(v.categories||[])[0]||"";
+  b.description=v.description||"";
+  b.isbn=(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier ||
+    (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
+  b.cover=cd.cover||cd.fallback||"";
+  b.coverFallback=cd.fallback||"";
+  b.coverQuality=cd.quality||"";
+  b.coverQualityVersion="v6";
+  b.googleBooksId=item.id||"";
+  b.editionLanguage=v.language||"";
+  b.editionLocked=true;
+  b.editionSelection="manual";
+  b.editionVersion="v6";
   b.metadataError="";
   b.metadataCheckedAt=new Date().toISOString();
 }
 
 async function enrichSeedBooks(){
-  const pending=books.filter(b=>b.id.startsWith("seed") && (missingMetadata(b).length || coverNeedsUpgrade(b)));
+  const pending=books.filter(b=>b.id.startsWith("seed") && !b.editionLocked && (b.editionVersion!=="v6" || missingMetadata(b).length || coverNeedsUpgrade(b)));
   for(const b of pending){
     try{
       const item=await fetchGoogleBook(b.title,b.author);
@@ -526,7 +674,7 @@ async function searchBooks(){
       return `<div class="result" onclick='chooseResult(${JSON.stringify({
         title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
         pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img,
-        coverFallback:cd.fallback||"", coverQuality:cd.quality||"", coverQualityVersion:"v5",
+        coverFallback:cd.fallback||"", coverQuality:cd.quality||"", coverQualityVersion:"v6",
         isbn:(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "",
         googleBooksId:item.id||"", metadataCheckedAt:new Date().toISOString(), metadataError:""
       }).replace(/'/g,"&#39;")})'>
@@ -540,7 +688,7 @@ async function searchBooks(){
 }
 
 function chooseResult(data){
-  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",source:"",why:"",started:"",finished:"",readingDays:"",...data};
+  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",source:"",why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v6",...data};
   books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
 }
 
@@ -558,7 +706,11 @@ function openBook(id){
       </div>
     </div>
     ${(()=>{const ms=metadataState(b);return `<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
-    ${missingMetadata(b).length?`<button class="retrybtn" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer Google Books</button>`:""}
+    <div class="edition-actions">
+      <button class="ghost" onclick="openEditionChooser('${b.id}')">Changer d’édition</button>
+      ${missingMetadata(b).length?`<button class="ghost" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer Google Books</button>`:""}
+    </div>
+    ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement : priorité au français, aux éditions non poche et aux éditions les plus anciennes disponibles.</div>`:""}
     ${b.coverQuality&&b.coverQuality.startsWith("upscaled-")?`<div class="notice" style="margin-top:8px">Google Books ne fournit qu’une petite image pour cette édition. Une version agrandie est utilisée.</div>`:""}
     ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
@@ -574,11 +726,95 @@ function openBook(id){
   document.getElementById("editModal").classList.add("open");
 }
 
+
+const editionCandidatesCache=new Map();
+
+function editionIsbn(item){
+  const ids=item?.volumeInfo?.industryIdentifiers||[];
+  return ids.find(x=>x.type==="ISBN_13")?.identifier ||
+    ids.find(x=>x.type==="ISBN_10")?.identifier || "";
+}
+
+function editionCardHtml(bookId,entry,index){
+  const item=entry.item;
+  const v=item.volumeInfo||{};
+  const cd=entry.coverData||coverDataFromGoogleItem(item);
+  const img=cd.cover||cd.fallback||"";
+  const current=books.find(x=>x.id===bookId)?.googleBooksId===item.id;
+  const publisher=v.publisher||"Éditeur non indiqué";
+  const date=v.publishedDate||"Date non indiquée";
+  const isbn=editionIsbn(item);
+  const meta=[
+    publisher,
+    date,
+    v.pageCount?v.pageCount+" pages":"",
+    isbn?"ISBN "+isbn:"",
+    v.language?("langue : "+v.language):""
+  ].filter(Boolean).map(esc).join(" · ");
+
+  return `<div class="edition-card ${current?"current":""}" onclick="selectEdition('${bookId}','${esc(item.id)}')">
+    <div class="edition-cover">
+      ${img?`<img src="${esc(img)}" data-fallback="${esc(cd.fallback||"")}" alt="${esc(v.title||"")}" onerror="handleCoverError(this)">`:`<div class="placeholder" style="font-size:10px">${esc(v.title||"")}</div>`}
+    </div>
+    <div>
+      <div class="edition-title">${esc(v.title||"Sans titre")}</div>
+      <div class="edition-meta">${meta}</div>
+      <div class="edition-badges">
+        ${index===0?`<span class="edition-tag recommended">Recommandée</span>`:""}
+        ${entry.pocket?`<span class="edition-tag pocket">Poche</span>`:""}
+        ${current?`<span class="edition-tag current">Édition actuelle</span>`:""}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function openEditionChooser(id){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  const modal=document.getElementById("editionModal");
+  const box=document.getElementById("editionContent");
+  modal.classList.add("open");
+  box.innerHTML='<div class="notice">Recherche des différentes éditions dans Google Books…</div>';
+
+  try{
+    const ranked=await fetchEditionCandidates(b.title,b.author);
+    if(!ranked.length){
+      box.innerHTML='<div class="metadata-status warning">Aucune autre édition pertinente trouvée dans Google Books.</div>';
+      return;
+    }
+
+    editionCandidatesCache.clear();
+    ranked.forEach(x=>editionCandidatesCache.set(x.item.id,x.item));
+
+    box.innerHTML=`<div class="edition-list">${ranked.slice(0,16).map((entry,index)=>editionCardHtml(id,entry,index)).join("")}</div>`;
+  }catch(e){
+    box.innerHTML=`<div class="metadata-status error">Erreur Google Books : ${esc(e.message||"erreur inconnue")}</div>`;
+  }
+}
+
+function closeEditionChooser(){
+  document.getElementById("editionModal").classList.remove("open");
+  document.getElementById("editionContent").innerHTML="";
+}
+
+function selectEdition(bookId,volumeId){
+  const b=books.find(x=>x.id===bookId);
+  const item=editionCandidatesCache.get(volumeId);
+  if(!b||!item)return;
+  applySelectedEdition(b,item);
+  save();
+  render();
+  closeEditionChooser();
+  openBook(bookId);
+}
+
+
 async function retryGoogleMetadata(id,button){
   const b=books.find(x=>x.id===id); if(!b)return;
   const original=button?.textContent||"";
   if(button){button.disabled=true;button.textContent="Recherche Google Books…";}
   b.metadataError="";
+  b.editionLocked=false;
+  b.editionSelection="auto";
   save();
   try{
     const item=await fetchGoogleBook(b.title,b.author);
@@ -642,6 +878,11 @@ function editBook(id){
 
 function saveEdit(id){
   const b=books.find(x=>x.id===id); if(!b)return;
+  const bibliographicChanged =
+    fPublisher.value.trim()!==String(b.publisher||"") ||
+    fYear.value.trim()!==String(b.year||"") ||
+    fIsbn.value.trim()!==String(b.isbn||"") ||
+    fCover.value.trim()!==String(b.cover||"");
   Object.assign(b,{
     title:fTitle.value.trim(),author:fAuthor.value.trim(),status:fStatus.value,pages:Number(fPages.value)||"",
     publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),
@@ -651,6 +892,11 @@ function saveEdit(id){
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
   });
+  if(bibliographicChanged){
+    b.editionLocked=true;
+    b.editionSelection="manual";
+    b.editionVersion="v6";
+  }
   save(); render(); openBook(id);
 }
 
