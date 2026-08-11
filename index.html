@@ -33,7 +33,7 @@
   @media(min-width:650px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
   .book{cursor:pointer}
   .cover{width:100%;aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:#ddd3c5;box-shadow:0 7px 18px rgba(35,25,10,.10);display:flex;align-items:center;justify-content:center}
-  .cover img{width:100%;height:100%;object-fit:cover}
+  .cover img{width:100%;height:100%;object-fit:cover;image-rendering:auto;background:#fff}
   .placeholder{padding:14px;text-align:center;font-weight:700;font-family:Georgia,serif}
   .title{font-size:14px;font-weight:700;margin-top:9px;line-height:1.2}
   .author{font-size:12px;color:var(--muted);margin-top:3px}
@@ -59,7 +59,7 @@
   .result small{color:var(--muted)}
   .detail-top{display:grid;grid-template-columns:115px 1fr;gap:16px}
   .detail-cover{width:115px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;background:#ddd3c5}
-  .detail-cover img{width:100%;height:100%;object-fit:cover}
+  .detail-cover img{width:100%;height:100%;object-fit:cover;image-rendering:auto;background:#fff}
   .detail-title{font-size:24px;font-weight:750;line-height:1.1;margin:0}
   .meta{color:var(--muted);font-size:14px;margin-top:7px;line-height:1.45}
   .stars{font-size:25px;letter-spacing:2px;margin:12px 0}
@@ -208,6 +208,100 @@ function scoreGoogleItem(item,title,author=""){
   return score;
 }
 
+
+function isGoogleBooksCover(url=""){
+  return /(^|\/\/)(books|books\.google)\.google\./i.test(url) || /books\.google\./i.test(url);
+}
+
+function cleanGoogleCoverUrl(url="", preferredZoom=null){
+  if(!url) return "";
+  try{
+    const u=new URL(String(url).replace(/^http:/,"https:"));
+    // The little folded-page effect comes from edge=curl.
+    u.searchParams.delete("edge");
+    if(preferredZoom && u.hostname.includes("google")){
+      u.searchParams.set("zoom", String(preferredZoom));
+    }
+    u.searchParams.set("source","gbs_api");
+    return u.toString();
+  }catch(_){
+    return String(url).replace(/^http:/,"https:")
+      .replace(/([?&])edge=curl(&|$)/,"$1")
+      .replace(/[?&]$/,"");
+  }
+}
+
+function forcedLargeGoogleCover(item, baseUrl=""){
+  // Google Books documents zoom 4 as the "large" image size.
+  if(baseUrl){
+    const upgraded=cleanGoogleCoverUrl(baseUrl,4);
+    if(upgraded) return upgraded;
+  }
+  if(item?.id){
+    return `https://books.google.com/books?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=4&source=gbs_api`;
+  }
+  return "";
+}
+
+function coverDataFromGoogleItem(item){
+  const v=item?.volumeInfo||{};
+  const links=v.imageLinks||{};
+
+  // Prefer a genuinely larger URL returned by the API.
+  const bestReturned =
+    links.extraLarge || links.large || links.medium || links.small ||
+    links.thumbnail || links.smallThumbnail || "";
+
+  const fallbackReturned =
+    links.medium || links.small || links.thumbnail ||
+    links.smallThumbnail || bestReturned || "";
+
+  let cover="";
+  if(links.extraLarge) cover=cleanGoogleCoverUrl(links.extraLarge);
+  else if(links.large) cover=cleanGoogleCoverUrl(links.large);
+  else if(links.medium) cover=cleanGoogleCoverUrl(links.medium);
+  else cover=forcedLargeGoogleCover(item,bestReturned);
+
+  const fallback=cleanGoogleCoverUrl(fallbackReturned);
+
+  return {
+    cover: cover || fallback,
+    fallback: fallback && fallback!==cover ? fallback : "",
+    quality:
+      links.extraLarge ? "extraLarge" :
+      links.large ? "large" :
+      links.medium ? "medium" :
+      links.small ? "upscaled-from-small" :
+      links.thumbnail ? "upscaled-from-thumbnail" :
+      links.smallThumbnail ? "upscaled-from-smallThumbnail" : ""
+  };
+}
+
+function coverNeedsUpgrade(b){
+  if(!b.cover) return true;
+  if(b.coverQualityVersion!=="v5") return true;
+  if(/edge=curl/i.test(b.cover)) return true;
+  const m=String(b.cover).match(/[?&]zoom=(\d+)/i);
+  if(isGoogleBooksCover(b.cover) && m && Number(m[1])<4) return true;
+  return false;
+}
+
+function handleCoverError(img){
+  const fb=img.dataset.fallback||"";
+  if(fb && !img.dataset.usedFallback){
+    img.dataset.usedFallback="1";
+    img.src=fb;
+    return;
+  }
+  const title=img.getAttribute("alt")||"Couverture indisponible";
+  img.outerHTML=`<div class="placeholder">${esc(title)}</div>`;
+}
+
+function coverImgHtml(b, lazy=true){
+  if(!b.cover) return `<div class="placeholder">${esc(b.title)}</div>`;
+  return `<img src="${esc(b.cover)}" data-fallback="${esc(b.coverFallback||"")}" alt="${esc(b.title)}" ${lazy?'loading="lazy"':''} onerror="handleCoverError(this)">`;
+}
+
 function missingMetadata(b){
   const fields = [
     ["auteur", b.author],
@@ -291,7 +385,7 @@ function render(){
   if(!list.length){grid.innerHTML='<div class="empty" style="grid-column:1/-1">Aucun livre ici pour le moment.</div>';return}
   grid.innerHTML=list.map(b=>`
     <div class="book" onclick="openBook('${b.id}')">
-      <div class="cover">${b.cover?`<img src="${esc(b.cover)}" onerror="this.parentNode.innerHTML='<div class=&quot;placeholder&quot;>${esc(b.title)}</div>'">`:`<div class="placeholder">${esc(b.title)}</div>`}</div>
+      <div class="cover">${coverImgHtml(b,true)}</div>
       <div class="title">${esc(b.title)}</div>
       <div class="author">${esc(b.author||"Auteur inconnu")}</div>
       <span class="badge">${esc(b.status)}</span>
@@ -367,8 +461,8 @@ async function fetchGoogleBook(title, author=""){
 function applyGoogleMetadata(b,item){
   if(!item) return;
   const v=item.volumeInfo||{};
-  const apiCover=(v.imageLinks?.extraLarge||v.imageLinks?.large||v.imageLinks?.medium||v.imageLinks?.small||v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
-  const stableCover=item.id ? `https://books.google.com/books/content?id=${encodeURIComponent(item.id)}&printsec=frontcover&img=1&zoom=2&source=gbs_api` : "";
+  const coverData=coverDataFromGoogleItem(item);
+
   b.author=b.author || (v.authors||[]).join(", ");
   b.publisher=b.publisher || v.publisher || "";
   b.year=b.year || (v.publishedDate||"").slice(0,4);
@@ -376,14 +470,23 @@ function applyGoogleMetadata(b,item){
   b.category=b.category || (v.categories||[])[0] || "";
   b.description=b.description || v.description || "";
   b.isbn=b.isbn || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "";
-  b.cover=b.cover || apiCover || stableCover;
+
+  // Upgrade Google Books covers automatically, but do not overwrite
+  // a manually supplied non-Google image.
+  if(!b.cover || isGoogleBooksCover(b.cover) || b.googleBooksId){
+    if(coverData.cover) b.cover=coverData.cover;
+    b.coverFallback=coverData.fallback||"";
+    b.coverQuality=coverData.quality||"";
+    b.coverQualityVersion="v5";
+  }
+
   b.googleBooksId=item.id || b.googleBooksId || "";
   b.metadataError="";
   b.metadataCheckedAt=new Date().toISOString();
 }
 
 async function enrichSeedBooks(){
-  const pending=books.filter(b=>b.id.startsWith("seed") && missingMetadata(b).length);
+  const pending=books.filter(b=>b.id.startsWith("seed") && (missingMetadata(b).length || coverNeedsUpgrade(b)));
   for(const b of pending){
     try{
       const item=await fetchGoogleBook(b.title,b.author);
@@ -418,14 +521,16 @@ async function searchBooks(){
     }
     box.innerHTML=items.map(item=>{
       const v=item.volumeInfo||{};
-      const img=(v.imageLinks?.extraLarge||v.imageLinks?.large||v.imageLinks?.medium||v.imageLinks?.small||v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||"").replace("http:","https:");
+      const cd=coverDataFromGoogleItem(item);
+      const img=cd.cover||cd.fallback||"";
       return `<div class="result" onclick='chooseResult(${JSON.stringify({
         title:v.title||"", author:(v.authors||[]).join(", "), publisher:v.publisher||"", year:(v.publishedDate||"").slice(0,4),
         pages:v.pageCount||"", category:(v.categories||[])[0]||"", description:v.description||"", cover:img,
+        coverFallback:cd.fallback||"", coverQuality:cd.quality||"", coverQualityVersion:"v5",
         isbn:(v.industryIdentifiers||[]).find(x=>x.type==="ISBN_13")?.identifier || (v.industryIdentifiers||[]).find(x=>x.type==="ISBN_10")?.identifier || "",
         googleBooksId:item.id||"", metadataCheckedAt:new Date().toISOString(), metadataError:""
       }).replace(/'/g,"&#39;")})'>
-        ${img?`<img src="${esc(img)}" onerror="this.style.visibility='hidden'">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
+        ${img?`<img src="${esc(img)}" data-fallback="${esc(cd.fallback||"")}" onerror="handleCoverError(this)">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
         <div><strong>${esc(v.title||"Sans titre")}</strong><small>${esc((v.authors||[]).join(", "))}<br>${esc(v.publisher||"")}${v.publishedDate?" · "+esc(v.publishedDate):""}${v.pageCount?" · "+v.pageCount+" p.":""}</small></div>
       </div>`;
     }).join("");
@@ -444,7 +549,7 @@ function openBook(id){
   const date=b.finished?new Date(b.finished+"T12:00:00").toLocaleDateString("fr-FR"):"";
   document.getElementById("editContent").innerHTML=`
     <div class="detail-top">
-      <div class="detail-cover">${b.cover?`<img src="${esc(b.cover)}">`:`<div class="placeholder">${esc(b.title)}</div>`}</div>
+      <div class="detail-cover">${coverImgHtml(b,false)}</div>
       <div>
         <h2 class="detail-title">${esc(b.title)}</h2>
         <div class="meta">${esc(b.author||"")}<br>${[b.publisher,b.year,b.pages?b.pages+" pages":"",b.category,b.isbn?"ISBN "+b.isbn:""].filter(Boolean).map(esc).join(" · ")}</div>
@@ -454,6 +559,7 @@ function openBook(id){
     </div>
     ${(()=>{const ms=metadataState(b);return `<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
     ${missingMetadata(b).length?`<button class="retrybtn" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer Google Books</button>`:""}
+    ${b.coverQuality&&b.coverQuality.startsWith("upscaled-")?`<div class="notice" style="margin-top:8px">Google Books ne fournit qu’une petite image pour cette édition. Une version agrandie est utilisée.</div>`:""}
     ${b.description?`<div class="block"><h3>Résumé</h3><p>${esc(stripHtml(b.description)).slice(0,700)}</p></div>`:""}
     ${(b.source||b.why)?`<div class="block"><h3>Pourquoi je l’ai ajouté</h3><p>${b.source?`<strong>${esc(b.source)}</strong><br>`:""}${esc(b.why||"")}</p></div>`:""}
     ${b.review?`<div class="block"><h3>Mon avis</h3><p>${esc(b.review)}</p></div>`:""}
@@ -538,7 +644,9 @@ function saveEdit(id){
   const b=books.find(x=>x.id===id); if(!b)return;
   Object.assign(b,{
     title:fTitle.value.trim(),author:fAuthor.value.trim(),status:fStatus.value,pages:Number(fPages.value)||"",
-    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),cover:fCover.value.trim(),
+    publisher:fPublisher.value.trim(),year:fYear.value.trim(),category:fCategory.value.trim(),isbn:fIsbn.value.trim(),
+    cover:fCover.value.trim(),coverFallback:(fCover.value.trim()!==b.cover)?"":(b.coverFallback||""),
+    coverQualityVersion:(fCover.value.trim()!==b.cover)?"manual":(b.coverQualityVersion||""),
     description:fDescription.value.trim(),source:fSource.value,rating:Number(fRating.value)||0,why:fWhy.value.trim(),
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
