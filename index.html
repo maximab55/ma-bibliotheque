@@ -131,6 +131,12 @@
   .danger{border:0;border-radius:14px;padding:11px 14px;background:#b42318;color:white;font-weight:700}
   .confirm-text{font-size:16px;line-height:1.5;margin:8px 0 18px}
   .confirm-title{font-weight:750}
+  .cloud-row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%}
+  .cloud-status{font-size:12px;color:var(--muted);text-align:center}
+  .cloud-status.ok{color:#317a4d}
+  .cloud-status.error{color:#b42318}
+  .photo-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .photo-name{font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -140,7 +146,7 @@
       <h1>Ma bibliothèque</h1>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
-    <button class="primary" onclick="openAdd()">＋ Ajouter</button>
+    <button class="primary" id="editOnlyAdd" onclick="openAdd()">＋ Ajouter</button>
   </header>
 
   <div class="search">
@@ -174,7 +180,9 @@
 <div class="bottom">
   <div class="bottom-inner">
     <button class="ghost" onclick="exportData()">Exporter mes données</button>
-    <button class="ghost" onclick="document.getElementById('importFile').click()">Importer</button>
+    <button class="ghost" id="editOnlyImport" onclick="document.getElementById('importFile').click()">Importer</button>
+    <button class="ghost" id="editModeBtn" onclick="toggleEditMode()">Activer le mode édition</button>
+    <div class="cloud-row"><span id="cloudStatus" class="cloud-status">Chargement de la bibliothèque en ligne…</span></div>
     <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)">
   </div>
 </div>
@@ -230,7 +238,7 @@
 
 
 <script>
-// Ma Bibliothèque V16 — consolidation recommandations + enrichissement sécurisé
+// Ma Bibliothèque V17 — bibliothèque centrale GitHub + couvertures photo
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -706,12 +714,243 @@ for(const b of books){
     b.recommendationCount=1;
   }
 }
+const CLOUD_CACHE_KEY="mybooks-cloud-cache-v1";
+const GITHUB_TOKEN_KEY="mybooks-github-token-v1";
+const GITHUB_OWNER="maximab55";
+const GITHUB_REPO="ma-bibliotheque";
+const GITHUB_BRANCH="main";
+const GITHUB_LIBRARY_PATH="library.json";
+const GITHUB_API="https://api.github.com";
+const PUBLIC_LIBRARY_URL="./library.json";
+
+const cachedCloud=(()=>{
+  try{return JSON.parse(localStorage.getItem(CLOUD_CACHE_KEY)||"null")}catch(_){return null}
+})();
+if(cachedCloud && Array.isArray(cachedCloud.books)){
+  books=cachedCloud.books;
+  deletedIds=new Set(Array.isArray(cachedCloud.deletedIds)?cachedCloud.deletedIds:[]);
+}
+
 let activeStatus = "Tous";
 let sortMode = localStorage.getItem("mybooks-sort-v1") || "smart";
-save();
+let cloudReady=false;
+let editMode=false;
+let githubToken="";
+let librarySha="";
+let cloudSaveTimer=null;
+let cloudSaveChain=Promise.resolve();
+let cloudErrorAlerted=false;
 
-function save(){ localStorage.setItem("mybooks-v1", JSON.stringify(books)); }
-function saveDeleted(){ localStorage.setItem(DELETED_KEY, JSON.stringify([...deletedIds])); }
+function cloudBackup(){
+  return {version:2,books,deletedIds:[...deletedIds]};
+}
+
+function saveLocalCache(){
+  localStorage.setItem(CLOUD_CACHE_KEY,JSON.stringify(cloudBackup()));
+}
+
+function setCloudStatus(text,kind=""){
+  const el=document.getElementById("cloudStatus");
+  if(!el)return;
+  el.textContent=text;
+  el.className="cloud-status"+(kind?" "+kind:"");
+}
+
+function updateEditUI(){
+  const add=document.getElementById("editOnlyAdd");
+  const imp=document.getElementById("editOnlyImport");
+  const btn=document.getElementById("editModeBtn");
+  if(add) add.style.display=editMode?"":"none";
+  if(imp) imp.style.display=editMode?"":"none";
+  if(btn) btn.textContent=editMode?"Désactiver le mode édition":"Activer le mode édition";
+}
+
+function bytesToBase64(bytes){
+  let binary="";
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
+  }
+  return btoa(binary);
+}
+
+function utf8ToBase64(text){
+  return bytesToBase64(new TextEncoder().encode(text));
+}
+
+async function githubRequest(path,{method="GET",body=null,token=githubToken}={}){
+  if(!token) throw new Error("Mode édition non activé.");
+  const headers={
+    "Accept":"application/vnd.github+json",
+    "Authorization":"Bearer "+token,
+    "X-GitHub-Api-Version":"2022-11-28"
+  };
+  if(body!==null) headers["Content-Type"]="application/json";
+  const r=await fetch(GITHUB_API+path,{
+    method,
+    headers,
+    body:body===null?undefined:JSON.stringify(body)
+  });
+  let data={};
+  try{data=await r.json()}catch(_){}
+  if(!r.ok){
+    const err=new Error(data?.message||("GitHub HTTP "+r.status));
+    err.status=r.status;
+    throw err;
+  }
+  return data;
+}
+
+async function validateGithubToken(token){
+  const data=await githubRequest(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}?ref=${encodeURIComponent(GITHUB_BRANCH)}`,
+    {token}
+  );
+  if(!data?.sha) throw new Error("Impossible de lire library.json via GitHub.");
+  librarySha=data.sha;
+  return true;
+}
+
+async function activateEditMode(){
+  let token=localStorage.getItem(GITHUB_TOKEN_KEY)||"";
+  if(!token){
+    token=window.prompt("Colle ici le token GitHub « ma-bibliotheque ». Il restera uniquement sur cet appareil.");
+  }
+  if(!token)return false;
+
+  setCloudStatus("Vérification du mode édition…");
+  try{
+    await validateGithubToken(token.trim());
+    githubToken=token.trim();
+    editMode=true;
+    localStorage.setItem(GITHUB_TOKEN_KEY,githubToken);
+    updateEditUI();
+    setCloudStatus("Bibliothèque en ligne · mode édition","ok");
+    return true;
+  }catch(e){
+    editMode=false;
+    githubToken="";
+    updateEditUI();
+    setCloudStatus("Mode lecture · token non validé","error");
+    alert("Le token GitHub n’a pas pu être validé. Vérifie que tu as bien collé le token complet.");
+    return false;
+  }
+}
+
+async function toggleEditMode(){
+  if(!editMode){
+    await activateEditMode();
+    return;
+  }
+  if(confirm("Désactiver le mode édition sur cet appareil ?")){
+    editMode=false;
+    githubToken="";
+    librarySha="";
+    localStorage.removeItem(GITHUB_TOKEN_KEY);
+    updateEditUI();
+    setCloudStatus("Bibliothèque en ligne · mode lecture","ok");
+    closeEdit();
+  }
+}
+
+async function ensureEditMode(){
+  if(editMode)return true;
+  return await activateEditMode();
+}
+
+async function loadCentralLibrary(){
+  setCloudStatus("Chargement de la bibliothèque en ligne…");
+  try{
+    const r=await fetch(PUBLIC_LIBRARY_URL+"?v="+Date.now(),{cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const data=await r.json();
+    if(!data || !Array.isArray(data.books)) throw new Error("Format library.json invalide");
+
+    books=data.books;
+    deletedIds=new Set(Array.isArray(data.deletedIds)?data.deletedIds:[]);
+    cloudReady=true;
+    saveLocalCache();
+    render();
+    setCloudStatus("Bibliothèque en ligne · mode lecture","ok");
+
+    const storedToken=localStorage.getItem(GITHUB_TOKEN_KEY);
+    if(storedToken){
+      try{
+        await validateGithubToken(storedToken);
+        githubToken=storedToken;
+        editMode=true;
+        updateEditUI();
+        setCloudStatus("Bibliothèque en ligne · mode édition","ok");
+      }catch(_){
+        // Keep the token stored: a temporary network error must not silently destroy it.
+        editMode=false;
+        githubToken="";
+        updateEditUI();
+      }
+    }
+  }catch(e){
+    cloudReady=false;
+    render();
+    setCloudStatus("Hors ligne · copie locale affichée","error");
+  }
+}
+
+async function writeCentralLibrary(){
+  if(!editMode || !cloudReady)return;
+  if(!librarySha) await validateGithubToken(githubToken);
+
+  setCloudStatus("Enregistrement en ligne…");
+  const content=utf8ToBase64(JSON.stringify(cloudBackup(),null,2));
+  try{
+    const data=await githubRequest(
+      `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}`,
+      {
+        method:"PUT",
+        body:{
+          message:"Mise à jour de la bibliothèque",
+          content,
+          sha:librarySha,
+          branch:GITHUB_BRANCH
+        }
+      }
+    );
+    if(data?.content?.sha) librarySha=data.content.sha;
+    cloudErrorAlerted=false;
+    setCloudStatus("Enregistré en ligne","ok");
+  }catch(e){
+    if(e.status===409){
+      setCloudStatus("Conflit de sauvegarde · recharge la page","error");
+      alert("GitHub signale qu’une autre modification a eu lieu en même temps. Recharge la page avant de continuer afin de ne rien écraser.");
+      return;
+    }
+    setCloudStatus("Échec de l’enregistrement en ligne","error");
+    if(!cloudErrorAlerted){
+      cloudErrorAlerted=true;
+      alert("La modification est conservée sur cet appareil, mais GitHub n’a pas pu l’enregistrer en ligne. Ne ferme pas la page et réessaie avec une connexion internet.");
+    }
+    throw e;
+  }
+}
+
+function scheduleCloudSave(){
+  if(!editMode || !cloudReady)return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(()=>{
+    cloudSaveChain=cloudSaveChain
+      .then(()=>writeCentralLibrary())
+      .catch(()=>{});
+  },650);
+}
+
+function save(){
+  saveLocalCache();
+  scheduleCloudSave();
+}
+
+function saveDeleted(){
+  saveLocalCache();
+  scheduleCloudSave();
+}
 
 document.querySelectorAll(".tab").forEach(btn=>{
   btn.onclick=()=>{
@@ -816,7 +1055,9 @@ function render(){
     </div>`).join("");
 }
 document.getElementById("sortSelect").value=sortMode;
+updateEditUI();
 render();
+loadCentralLibrary();
 
 function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
 
@@ -1230,7 +1471,7 @@ async function enrichSeedBooks(){
     await new Promise(r=>setTimeout(r,300));
   }
 }
-setTimeout(enrichSeedBooks,500);
+// V17: enrichissement automatique désactivé — la base centrale est canonique.
 
 function importedMatchConfidence(book,item){
   const v=item?.volumeInfo||{};
@@ -1319,9 +1560,9 @@ async function enrichImportedBuyBooks(){
     await waitMs(900);
   }
 }
-setTimeout(enrichImportedBuyBooks,1800);
+// V17: enrichissement automatique de masse désactivé.
 
-function openAdd(){ document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
+async function openAdd(){ if(!await ensureEditMode())return; document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
 function closeAdd(){ document.getElementById("addModal").classList.remove("open"); document.getElementById("results").innerHTML=""; }
 
 async function searchBooks(){
@@ -1359,8 +1600,9 @@ async function searchBooks(){
   }
 }
 
-function chooseResult(data){
-  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",quantity:1,addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
+async function chooseResult(data){
+  if(!await ensureEditMode())return;
+  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
   books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
 }
 
@@ -1388,10 +1630,10 @@ function openBook(id){
       </div>
     </div>
     ${(()=>{const ms=metadataState(b);return ms.kind==="ok"?"":`<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
-    <div class="edition-actions">
+    ${editMode?`<div class="edition-actions">
       <button class="edition-link" onclick="openEditionChooser('${b.id}')">Changer d’édition</button>
       ${missingMetadata(b).length?`<button class="edition-link" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer la recherche</button>`:""}
-    </div>
+    </div>`:""}
     ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement : priorité au français, aux éditions non poche et aux éditions les plus anciennes disponibles.</div>`:""}
     ${b.coverQuality&&b.coverQuality.startsWith("upscaled-")?`<div class="notice" style="margin-top:8px">Google Books ne fournit qu’une petite image pour cette édition. Une version agrandie est utilisée.</div>`:""}
     ${b.description?`<div class="block"><h3>Résumé</h3>
@@ -1439,12 +1681,12 @@ function openBook(id){
       </div>
     </div>`:""}
     <div class="toolbar">
-      <button class="primary" onclick="editBook('${b.id}')">Modifier</button>
+      ${editMode?`<button class="primary" onclick="editBook('${b.id}')">Modifier</button>`:""}
       <button class="ghost" onclick="closeEdit()">Fermer</button>
     </div>
-    <div class="delete-zone">
+    ${editMode?`<div class="delete-zone">
       <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer de ma bibliothèque</button>
-    </div>`;
+    </div>`:""}`;
   document.getElementById("editModal").classList.add("open");
 }
 
@@ -1524,6 +1766,7 @@ async function loadEditionChooser(bookId,extraTerm=""){
 }
 
 async function openEditionChooser(id){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
   currentEditionBookId=id;
   document.getElementById("editionSearchTerm").value="";
@@ -1557,6 +1800,7 @@ function selectEdition(bookId,volumeId){
 
 
 async function retryGoogleMetadata(id,button){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
   const original=button?.textContent||"";
   if(button){button.disabled=true;button.textContent="Recherche des catalogues…";}
@@ -1580,7 +1824,8 @@ async function retryGoogleMetadata(id,button){
 
 function closeEdit(){document.getElementById("editModal").classList.remove("open")}
 
-function editBook(id){
+async function editBook(id){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
   document.getElementById("editContent").innerHTML=`
     <h2>Modifier</h2>
@@ -1597,6 +1842,14 @@ function editBook(id){
     <div class="field"><label>Genre / thème</label><input id="fCategory" value="${esc(b.category||"")}"></div>
     <div class="field"><label>ISBN</label><input id="fIsbn" value="${esc(b.isbn||"")}"></div>
     <div class="field"><label>URL de couverture</label><input id="fCover" value="${esc(b.cover||"")}" placeholder="À compléter seulement si les catalogues ne trouvent pas la couverture"></div>
+    <div class="field">
+      <label>Ou choisir une couverture depuis la photothèque</label>
+      <div class="photo-picker">
+        <button type="button" class="ghost" onclick="document.getElementById('fCoverFile').click()">Choisir une photo</button>
+        <span class="photo-name" id="fCoverFileName">Aucune photo sélectionnée</span>
+      </div>
+      <input type="file" id="fCoverFile" accept="image/*" hidden onchange="handleCoverFileSelected(event,'${b.id}')">
+    </div>
     <div class="field"><label>Résumé</label><textarea id="fDescription">${esc(stripHtml(b.description||""))}</textarea></div>
     <div class="row">
       <div class="field"><label>Source</label><select id="fSource">
@@ -1624,13 +1877,88 @@ function editBook(id){
     </div>
     <div class="field"><label>Nombre de jours</label><input type="number" id="fDays" value="${esc(b.readingDays||"")}"></div>
     <div class="toolbar">
-      <button class="primary" onclick="saveEdit('${b.id}')">Enregistrer</button>
+      <button class="primary" id="saveEditBtn" onclick="saveEdit('${b.id}')">Enregistrer</button>
       <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer</button>
     </div>`;
 }
 
-function saveEdit(id){
+let pendingCoverUpload=null;
+
+function handleCoverFileSelected(event,bookId){
+  const file=event.target.files?.[0];
+  if(!file)return;
+  pendingCoverUpload={bookId,file};
+  const label=document.getElementById("fCoverFileName");
+  if(label)label.textContent=file.name||"Photo sélectionnée";
+}
+
+function loadImageFromFile(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(url);resolve(img)};
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("Impossible de lire cette image."))};
+    img.src=url;
+  });
+}
+
+async function compressCoverPhoto(file){
+  const img=await loadImageFromFile(file);
+  const maxW=900,maxH=1200;
+  const ratio=Math.min(1,maxW/img.naturalWidth,maxH/img.naturalHeight);
+  const w=Math.max(1,Math.round(img.naturalWidth*ratio));
+  const h=Math.max(1,Math.round(img.naturalHeight*ratio));
+  const canvas=document.createElement("canvas");
+  canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext("2d");
+  ctx.drawImage(img,0,0,w,h);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.84));
+  if(!blob)throw new Error("Impossible de préparer la couverture.");
+  return blob;
+}
+
+async function uploadManualCover(bookId,file){
+  if(!await ensureEditMode())throw new Error("Mode édition requis.");
+  const blob=await compressCoverPhoto(file);
+  const bytes=new Uint8Array(await blob.arrayBuffer());
+  const path=`covers/${bookId}-${Date.now()}.jpg`;
+
+  setCloudStatus("Envoi de la couverture…");
+  await githubRequest(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+    {
+      method:"PUT",
+      body:{
+        message:"Ajout d’une couverture",
+        content:bytesToBase64(bytes),
+        branch:GITHUB_BRANCH
+      }
+    }
+  );
+
+  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${path}`;
+}
+
+async function saveEdit(id){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
+
+  const saveBtn=document.getElementById("saveEditBtn");
+  const originalSaveText=saveBtn?.textContent||"Enregistrer";
+
+  if(pendingCoverUpload && pendingCoverUpload.bookId===id){
+    try{
+      if(saveBtn){saveBtn.disabled=true;saveBtn.textContent="Envoi de la photo…";}
+      const newCover=await uploadManualCover(id,pendingCoverUpload.file);
+      fCover.value=newCover;
+      pendingCoverUpload=null;
+    }catch(e){
+      if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
+      alert(e.message||"Impossible d’envoyer cette couverture.");
+      return;
+    }
+  }
+
   const bibliographicChanged =
     fPublisher.value.trim()!==String(b.publisher||"") ||
     fYear.value.trim()!==String(b.year||"") ||
@@ -1656,11 +1984,13 @@ function saveEdit(id){
     b.editionVersion="v10";
   }
   save(); render(); openBook(id);
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
 }
 
 let pendingDeleteId="";
 
-function askDeleteBook(id){
+async function askDeleteBook(id){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id);
   if(!b)return;
   pendingDeleteId=id;
@@ -1673,7 +2003,8 @@ function closeDeleteConfirm(){
   document.getElementById("deleteModal").classList.remove("open");
 }
 
-function confirmDeleteBook(){
+async function confirmDeleteBook(){
+  if(!await ensureEditMode())return;
   if(!pendingDeleteId)return;
   const id=pendingDeleteId;
 
@@ -1702,7 +2033,8 @@ function exportData(){
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="ma-bibliotheque.json"; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-function importData(e){
+async function importData(e){
+  if(!await ensureEditMode())return;
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader(); r.onload=()=>{
     try{
