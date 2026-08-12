@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque</title>
+<title>Ma Bibliothèque · v17d</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -14,9 +14,11 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
   button,input,select,textarea{font:inherit}
-  .app{max-width:980px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(90px + env(safe-area-inset-bottom))}
+  .app{max-width:980px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(58px + env(safe-area-inset-bottom))}
   header{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:14px}
   h1{font-size:31px;line-height:1.05;margin:0}
+  .title-line{display:flex;align-items:baseline;gap:7px}
+  .version-label{font-size:10px;line-height:1;color:var(--muted);font-weight:600;letter-spacing:.02em;white-space:nowrap}
   .sub{color:var(--muted);font-size:14px;margin-top:5px}
   .iconbtn,.primary,.ghost{border:0;border-radius:14px;padding:11px 14px;cursor:pointer}
   .primary{background:var(--accent);color:white;font-weight:650}
@@ -63,9 +65,13 @@
   .author{font-size:12px;color:var(--muted);margin-top:3px}
   .badge{display:inline-block;font-size:11px;padding:5px 8px;border-radius:999px;background:var(--green);margin-top:6px}
   .empty{border:1px dashed #cfc6bb;border-radius:18px;padding:26px;text-align:center;color:var(--muted)}
-  .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:9px 14px calc(9px + env(safe-area-inset-bottom));display:flex;justify-content:center}
-  .bottom-inner{max-width:980px;width:100%;display:flex;gap:9px}
-  .bottom button{flex:1}
+  .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:20}
+  .bottom-inner{max-width:980px;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+  .bottom-inner::-webkit-scrollbar{display:none}
+  .bottom button{flex:0 0 auto;border-radius:999px;padding:7px 10px;font-size:11px;line-height:1;min-height:30px;white-space:nowrap}
+  @media(max-width:430px){
+    .bottom-inner{justify-content:flex-start}
+  }
   .modal{position:fixed;inset:0;background:rgba(20,18,15,.42);display:none;align-items:flex-end;justify-content:center;z-index:50}
   .modal.open{display:flex}
   .sheet{background:var(--card);width:100%;max-width:760px;max-height:92vh;overflow:auto;border-radius:24px 24px 0 0;padding:19px 18px calc(26px + env(safe-area-inset-bottom))}
@@ -131,8 +137,9 @@
   .danger{border:0;border-radius:14px;padding:11px 14px;background:#b42318;color:white;font-weight:700}
   .confirm-text{font-size:16px;line-height:1.5;margin:8px 0 18px}
   .confirm-title{font-weight:750}
-  .cloud-row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%}
-  .cloud-status{font-size:12px;color:var(--muted);text-align:center}
+  .cloud-row{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:auto;min-width:0}
+  .cloud-status{font-size:10.5px;line-height:1;color:var(--muted);text-align:center;white-space:nowrap}
+  .cloud-status::before{content:"●";font-size:7px;margin-right:4px;vertical-align:1px}
   .cloud-status.ok{color:#317a4d}
   .cloud-status.error{color:#b42318}
   .photo-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -143,7 +150,10 @@
 <div class="app">
   <header>
     <div>
-      <h1>Ma bibliothèque</h1>
+      <div class="title-line">
+        <h1>Ma bibliothèque</h1>
+        <span class="version-label">v17d</span>
+      </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
     <button class="primary" id="editOnlyAdd" onclick="openAdd()">＋ Ajouter</button>
@@ -179,10 +189,10 @@
 
 <div class="bottom">
   <div class="bottom-inner">
-    <button class="ghost" onclick="exportData()">Exporter mes données</button>
+    <button class="ghost" onclick="exportData()">Exporter</button>
     <button class="ghost" id="editOnlyImport" onclick="document.getElementById('importFile').click()">Importer</button>
-    <button class="ghost" id="editModeBtn" onclick="toggleEditMode()">Activer le mode édition</button>
-    <div class="cloud-row"><span id="cloudStatus" class="cloud-status">Chargement de la bibliothèque en ligne…</span></div>
+    <button class="ghost" id="editModeBtn" onclick="toggleEditMode()">Édition</button>
+    <div class="cloud-row"><span id="cloudStatus" class="cloud-status">Chargement…</span></div>
     <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)">
   </div>
 </div>
@@ -238,7 +248,7 @@
 
 
 <script>
-// Ma Bibliothèque V17c — écritures GitHub sérialisées + couvertures photo
+// Ma Bibliothèque V17d — UI mobile compacte
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -754,7 +764,22 @@ function saveLocalCache(){
 function setCloudStatus(text,kind=""){
   const el=document.getElementById("cloudStatus");
   if(!el)return;
-  el.textContent=text;
+
+  const compact={
+    "Chargement de la bibliothèque en ligne…":"Chargement…",
+    "Bibliothèque en ligne · mode lecture":"En ligne · Lecture",
+    "Bibliothèque en ligne · mode édition":"En ligne · Édition",
+    "Vérification du mode édition…":"Vérification…",
+    "Mode lecture · token non validé":"Token invalide",
+    "Hors ligne · copie locale affichée":"Hors ligne",
+    "Enregistrement en ligne…":"Sauvegarde…",
+    "Enregistré en ligne":"Enregistré",
+    "Échec de l’enregistrement en ligne":"Erreur sauvegarde",
+    "Envoi de la couverture…":"Envoi photo…"
+  };
+
+  el.textContent=compact[text]||text;
+  el.title=text;
   el.className="cloud-status"+(kind?" "+kind:"");
 }
 
@@ -764,7 +789,7 @@ function updateEditUI(){
   const btn=document.getElementById("editModeBtn");
   if(add) add.style.display=editMode?"":"none";
   if(imp) imp.style.display=editMode?"":"none";
-  if(btn) btn.textContent=editMode?"Désactiver le mode édition":"Activer le mode édition";
+  if(btn) btn.textContent=editMode?"Quitter édition":"Édition";
 }
 
 function bytesToBase64(bytes){
