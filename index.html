@@ -238,7 +238,7 @@
 
 
 <script>
-// Ma Bibliothèque V17b — bibliothèque centrale GitHub directe + couvertures photo
+// Ma Bibliothèque V17c — écritures GitHub sérialisées + couvertures photo
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -739,7 +739,8 @@ let editMode=false;
 let githubToken="";
 let librarySha="";
 let cloudSaveTimer=null;
-let cloudSaveChain=Promise.resolve();
+let githubMutationChain=Promise.resolve();
+let lastGithubMutationAt=0;
 let cloudErrorAlerted=false;
 
 function cloudBackup(){
@@ -802,13 +803,33 @@ async function githubRequest(path,{method="GET",body=null,token=githubToken}={})
   return data;
 }
 
-async function validateGithubToken(token){
+async function enqueueGithubMutation(task){
+  const run=async()=>{
+    // GitHub recommends serial mutative requests and a short pause between them.
+    const elapsed=Date.now()-lastGithubMutationAt;
+    if(elapsed<1100) await waitMs(1100-elapsed);
+    try{
+      return await task();
+    }finally{
+      lastGithubMutationAt=Date.now();
+    }
+  };
+  githubMutationChain=githubMutationChain.then(run,run);
+  return githubMutationChain;
+}
+
+async function getLatestLibrarySha(token=githubToken){
   const data=await githubRequest(
     `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}?ref=${encodeURIComponent(GITHUB_BRANCH)}`,
     {token}
   );
-  if(!data?.sha) throw new Error("Impossible de lire library.json via GitHub.");
+  if(!data?.sha) throw new Error("Impossible de récupérer la version actuelle de library.json.");
   librarySha=data.sha;
+  return librarySha;
+}
+
+async function validateGithubToken(token){
+  await getLatestLibrarySha(token);
   return true;
 }
 
@@ -906,51 +927,65 @@ async function loadCentralLibrary(){
   }
 }
 
-async function writeCentralLibrary(){
+async function writeCentralLibraryCore(){
   if(!editMode || !cloudReady)return;
-  if(!librarySha) await validateGithubToken(githubToken);
 
   setCloudStatus("Enregistrement en ligne…");
   const content=utf8ToBase64(JSON.stringify(cloudBackup(),null,2));
-  try{
-    const data=await githubRequest(
-      `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}`,
-      {
-        method:"PUT",
-        body:{
-          message:"Mise à jour de la bibliothèque",
-          content,
-          sha:librarySha,
-          branch:GITHUB_BRANCH
-        }
+
+  // Always refresh the blob SHA immediately before updating the file.
+  await getLatestLibrarySha(githubToken);
+
+  const doPut=()=>githubRequest(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}`,
+    {
+      method:"PUT",
+      body:{
+        message:"Mise à jour de la bibliothèque",
+        content,
+        sha:librarySha,
+        branch:GITHUB_BRANCH
       }
-    );
+    }
+  );
+
+  try{
+    let data;
+    try{
+      data=await doPut();
+    }catch(e){
+      if(e.status!==409) throw e;
+
+      // A branch/file changed between GET and PUT. Refresh once and retry serially.
+      await waitMs(1200);
+      await getLatestLibrarySha(githubToken);
+      data=await doPut();
+    }
+
     if(data?.content?.sha) librarySha=data.content.sha;
     saveLocalCache();
     cloudErrorAlerted=false;
     setCloudStatus("Enregistré en ligne","ok");
+    return true;
   }catch(e){
-    if(e.status===409){
-      setCloudStatus("Conflit de sauvegarde · recharge la page","error");
-      alert("GitHub signale qu’une autre modification a eu lieu en même temps. Recharge la page avant de continuer afin de ne rien écraser.");
-      return;
-    }
     setCloudStatus("Échec de l’enregistrement en ligne","error");
     if(!cloudErrorAlerted){
       cloudErrorAlerted=true;
-      alert("La modification est conservée sur cet appareil, mais GitHub n’a pas pu l’enregistrer en ligne. Ne ferme pas la page et réessaie avec une connexion internet.");
+      alert("GitHub n’a pas pu enregistrer la modification. Elle reste conservée sur cet appareil. Réessaie dans quelques secondes.");
     }
     throw e;
   }
+}
+
+function writeCentralLibrary(){
+  return enqueueGithubMutation(()=>writeCentralLibraryCore());
 }
 
 function scheduleCloudSave(){
   if(!editMode || !cloudReady)return;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer=setTimeout(()=>{
-    cloudSaveChain=cloudSaveChain
-      .then(()=>writeCentralLibrary())
-      .catch(()=>{});
+    writeCentralLibrary().catch(()=>{});
   },650);
 }
 
@@ -1936,7 +1971,7 @@ async function uploadManualCover(bookId,file){
   const path=`covers/${bookId}-${Date.now()}.jpg`;
 
   setCloudStatus("Envoi de la couverture…");
-  await githubRequest(
+  await enqueueGithubMutation(()=>githubRequest(
     `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
     {
       method:"PUT",
@@ -1946,7 +1981,7 @@ async function uploadManualCover(bookId,file){
         branch:GITHUB_BRANCH
       }
     }
-  );
+  ));
 
   return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${path}`;
 }
@@ -1954,6 +1989,9 @@ async function uploadManualCover(bookId,file){
 async function saveEdit(id){
   if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
+
+  // This edit becomes the authoritative next write; cancel an obsolete debounce.
+  clearTimeout(cloudSaveTimer);
 
   const saveBtn=document.getElementById("saveEditBtn");
   const originalSaveText=saveBtn?.textContent||"Enregistrer";
@@ -1995,7 +2033,19 @@ async function saveEdit(id){
     b.editionSelection="manual";
     b.editionVersion="v10";
   }
-  save(); render(); openBook(id);
+  saveLocalCache();
+  render();
+
+  try{
+    if(saveBtn){saveBtn.disabled=true;saveBtn.textContent="Enregistrement…";}
+    await writeCentralLibrary();
+    openBook(id);
+  }catch(e){
+    // Keep edit modal open so the user can retry without losing the local edit.
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
+    return;
+  }
+
   if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
 }
 
@@ -2022,11 +2072,11 @@ async function confirmDeleteBook(){
 
   // Tombstone: indispensable pour les livres initiaux codés dans l’application.
   // Sans cela, un seed supprimé réapparaîtrait au prochain rechargement.
+  clearTimeout(cloudSaveTimer);
   deletedIds.add(id);
-  saveDeleted();
-
   books=books.filter(x=>x.id!==id);
-  save();
+  saveLocalCache();
+  writeCentralLibrary().catch(()=>{});
 
   closeDeleteConfirm();
   closeEditionChooser();
