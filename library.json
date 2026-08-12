@@ -3,7 +3,7 @@
   "books": [
     {
       "id": "b1786530477327",
-      "status": "À lire",
+      "status": "En cours",
       "rating": 0,
       "review": "",
       "format": "",
@@ -25,7 +25,7 @@
       "editionVersion": "v10",
       "title": "Les aventures d'un idéaliste",
       "author": "Isaac Bashevis Singer",
-      "publisher": "",
+      "publisher": "Stock",
       "year": "2011",
       "publishedDate": "2011",
       "pages": 239,
