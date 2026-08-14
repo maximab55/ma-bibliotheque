@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v17d</title>
+<title>Ma Bibliothèque · v17e</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -152,7 +152,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v17d</span>
+        <span class="version-label">v17e</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -242,13 +242,13 @@
     <p class="notice">Cette suppression sera enregistrée et le livre ne réapparaîtra pas au prochain chargement.</p>
     <div class="toolbar">
       <button class="ghost" onclick="closeDeleteConfirm()">Annuler</button>
-      <button class="danger" onclick="confirmDeleteBook()">Oui, supprimer</button>
+      <button class="danger" id="confirmDeleteBtn" onclick="confirmDeleteBook()">Oui, supprimer</button>
     </div>
   </div>
 
 
 <script>
-// Ma Bibliothèque V17d — UI mobile compacte
+// Ma Bibliothèque V17e — fiabilité des écritures GitHub
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -775,7 +775,12 @@ function setCloudStatus(text,kind=""){
     "Enregistrement en ligne…":"Sauvegarde…",
     "Enregistré en ligne":"Enregistré",
     "Échec de l’enregistrement en ligne":"Erreur sauvegarde",
-    "Envoi de la couverture…":"Envoi photo…"
+    "Envoi de la couverture…":"Envoi photo…",
+    "Ajout du livre…":"Ajout…",
+    "Suppression du livre…":"Suppression…",
+    "Mise à jour de l’édition…":"Mise à jour…",
+    "Import de la bibliothèque…":"Import…",
+    "Non enregistré":"Non enregistré"
   };
 
   el.textContent=compact[text]||text;
@@ -813,19 +818,81 @@ async function githubRequest(path,{method="GET",body=null,token=githubToken}={})
     "X-GitHub-Api-Version":"2022-11-28"
   };
   if(body!==null) headers["Content-Type"]="application/json";
-  const r=await fetch(GITHUB_API+path,{
-    method,
-    headers,
-    body:body===null?undefined:JSON.stringify(body)
-  });
+
+  let r;
+  try{
+    r=await fetch(GITHUB_API+path,{
+      method,
+      headers,
+      body:body===null?undefined:JSON.stringify(body)
+    });
+  }catch(networkError){
+    const err=new Error("Erreur réseau");
+    err.status=0;
+    err.cause=networkError;
+    throw err;
+  }
+
   let data={};
   try{data=await r.json()}catch(_){}
+
   if(!r.ok){
     const err=new Error(data?.message||("GitHub HTTP "+r.status));
     err.status=r.status;
+    err.retryAfter=Number(r.headers.get("Retry-After")||0);
+    err.rateLimitRemaining=r.headers.get("X-RateLimit-Remaining");
+    err.rateLimitReset=Number(r.headers.get("X-RateLimit-Reset")||0);
+    err.documentationUrl=data?.documentation_url||"";
     throw err;
   }
   return data;
+}
+
+function githubErrorLabel(e){
+  const status=Number(e?.status)||0;
+  const msg=String(e?.message||"Erreur inconnue");
+  return status ? `GitHub ${status} — ${msg}` : `Réseau — ${msg}`;
+}
+
+function isRateLimitError(e){
+  const status=Number(e?.status)||0;
+  const msg=String(e?.message||"").toLowerCase();
+  return status===429 ||
+    (status===403 && (
+      Number(e?.retryAfter)>0 ||
+      String(e?.rateLimitRemaining)==="0" ||
+      msg.includes("rate limit") ||
+      msg.includes("secondary")
+    ));
+}
+
+function isTransientGithubError(e){
+  const status=Number(e?.status)||0;
+  return status===0 || status===409 || isRateLimitError(e) || status>=500;
+}
+
+function githubRetryDelayMs(e,attempt){
+  if(Number(e?.retryAfter)>0) return Math.min(60000,Number(e.retryAfter)*1000+250);
+
+  if(isRateLimitError(e) && Number(e?.rateLimitReset)>0){
+    const untilReset=(Number(e.rateLimitReset)*1000)-Date.now()+500;
+    if(untilReset>0) return Math.min(60000,untilReset);
+  }
+
+  // 1.4s, 2.8s, 5.6s, 11.2s max.
+  return Math.min(12000,1400*Math.pow(2,Math.max(0,attempt-1)));
+}
+
+function librarySnapshotText(){
+  return JSON.stringify(cloudBackup(),null,2);
+}
+
+function restoreLibrarySnapshot(snapshotText){
+  const data=JSON.parse(snapshotText);
+  books=Array.isArray(data.books)?data.books:[];
+  deletedIds=new Set(Array.isArray(data.deletedIds)?data.deletedIds:[]);
+  saveLocalCache();
+  render();
 }
 
 async function enqueueGithubMutation(task){
@@ -952,75 +1019,90 @@ async function loadCentralLibrary(){
   }
 }
 
-async function writeCentralLibraryCore(){
-  if(!editMode || !cloudReady)return;
+async function writeCentralLibraryCore(snapshotText){
+  if(!editMode || !cloudReady) throw Object.assign(new Error("Bibliothèque en ligne indisponible."),{status:0});
 
   setCloudStatus("Enregistrement en ligne…");
-  const content=utf8ToBase64(JSON.stringify(cloudBackup(),null,2));
 
-  // Always refresh the blob SHA immediately before updating the file.
-  await getLatestLibrarySha(githubToken);
+  const content=utf8ToBase64(snapshotText);
+  const maxAttempts=4;
+  let lastError=null;
 
-  const doPut=()=>githubRequest(
-    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}`,
-    {
-      method:"PUT",
-      body:{
-        message:"Mise à jour de la bibliothèque",
-        content,
-        sha:librarySha,
-        branch:GITHUB_BRANCH
-      }
-    }
-  );
-
-  try{
-    let data;
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
     try{
-      data=await doPut();
-    }catch(e){
-      if(e.status!==409) throw e;
-
-      // A branch/file changed between GET and PUT. Refresh once and retry serially.
-      await waitMs(1200);
+      // Refresh the current blob SHA immediately before each PUT.
       await getLatestLibrarySha(githubToken);
-      data=await doPut();
-    }
 
-    if(data?.content?.sha) librarySha=data.content.sha;
-    saveLocalCache();
-    cloudErrorAlerted=false;
-    setCloudStatus("Enregistré en ligne","ok");
-    return true;
-  }catch(e){
-    setCloudStatus("Échec de l’enregistrement en ligne","error");
-    if(!cloudErrorAlerted){
-      cloudErrorAlerted=true;
-      alert("GitHub n’a pas pu enregistrer la modification. Elle reste conservée sur cet appareil. Réessaie dans quelques secondes.");
+      const data=await githubRequest(
+        `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}`,
+        {
+          method:"PUT",
+          body:{
+            message:"Mise à jour de la bibliothèque",
+            content,
+            sha:librarySha,
+            branch:GITHUB_BRANCH
+          }
+        }
+      );
+
+      if(data?.content?.sha) librarySha=data.content.sha;
+      cloudErrorAlerted=false;
+      setCloudStatus("Enregistré en ligne","ok");
+      return true;
+    }catch(e){
+      lastError=e;
+
+      if(!isTransientGithubError(e) || attempt===maxAttempts){
+        break;
+      }
+
+      setCloudStatus(`Nouvelle tentative ${attempt}/${maxAttempts-1}…`);
+      await waitMs(githubRetryDelayMs(e,attempt));
     }
-    throw e;
   }
+
+  setCloudStatus("Non enregistré","error");
+  throw lastError||new Error("Échec de l’enregistrement.");
 }
 
-function writeCentralLibrary(){
-  return enqueueGithubMutation(()=>writeCentralLibraryCore());
+function writeCentralLibrary(snapshotText=librarySnapshotText()){
+  const immutableSnapshot=String(snapshotText);
+  return enqueueGithubMutation(()=>writeCentralLibraryCore(immutableSnapshot));
+}
+
+async function persistCurrentLibraryOrThrow(context="Modification"){
+  const snapshot=librarySnapshotText();
+  try{
+    await writeCentralLibrary(snapshot);
+    saveLocalCache();
+    return true;
+  }catch(e){
+    const details=githubErrorLabel(e);
+    alert(`${context} non enregistré.\n\n${details}\n\nAucune modification n’a été validée dans la bibliothèque en ligne.`);
+    throw e;
+  }
 }
 
 function scheduleCloudSave(){
   if(!editMode || !cloudReady)return;
   clearTimeout(cloudSaveTimer);
+  const snapshot=librarySnapshotText();
   cloudSaveTimer=setTimeout(()=>{
-    writeCentralLibrary().catch(()=>{});
+    writeCentralLibrary(snapshot)
+      .then(()=>saveLocalCache())
+      .catch(e=>{
+        setCloudStatus("Non enregistré","error");
+        console.error("Sauvegarde GitHub:",githubErrorLabel(e));
+      });
   },650);
 }
 
 function save(){
-  saveLocalCache();
   scheduleCloudSave();
 }
 
 function saveDeleted(){
-  saveLocalCache();
   scheduleCloudSave();
 }
 
@@ -1674,8 +1756,28 @@ async function searchBooks(){
 
 async function chooseResult(data){
   if(!await ensureEditMode())return;
+
+  const before=librarySnapshotText();
   const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
-  books.unshift(b); save(); closeAdd(); render(); openBook(b.id);
+  const box=document.getElementById("results");
+
+  books.unshift(b);
+  render();
+  setCloudStatus("Ajout du livre…");
+
+  if(box) box.innerHTML='<div class="notice">Enregistrement du livre dans la bibliothèque en ligne…</div>';
+
+  try{
+    await persistCurrentLibraryOrThrow("Ajout du livre");
+    closeAdd();
+    render();
+    openBook(b.id);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    if(box){
+      box.innerHTML=`<div class="metadata-status error">${esc(githubErrorLabel(e))}<br>Le livre n’a pas été ajouté. Relance la recherche pour réessayer.</div>`;
+    }
+  }
 }
 
 function summaryNeedsToggle(text=""){
@@ -1859,27 +1961,40 @@ function closeEditionChooser(){
   currentEditionBookId="";
 }
 
-function selectEdition(bookId,volumeId){
+async function selectEdition(bookId,volumeId){
+  if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===bookId);
   const item=editionCandidatesCache.get(volumeId);
   if(!b||!item)return;
+
+  const before=librarySnapshotText();
   applySelectedEdition(b,item);
-  save();
   render();
-  closeEditionChooser();
-  openBook(bookId);
+  setCloudStatus("Mise à jour de l’édition…");
+
+  try{
+    await persistCurrentLibraryOrThrow("Changement d’édition");
+    closeEditionChooser();
+    openBook(bookId);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    openBook(bookId);
+  }
 }
 
 
 async function retryGoogleMetadata(id,button){
   if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
+
+  const before=librarySnapshotText();
   const original=button?.textContent||"";
   if(button){button.disabled=true;button.textContent="Recherche des catalogues…";}
+
   b.metadataError="";
   b.editionLocked=false;
   b.editionSelection="auto";
-  save();
+
   try{
     const item=await fetchGoogleBook(b.title,b.author);
     if(item){
@@ -1890,7 +2005,17 @@ async function retryGoogleMetadata(id,button){
   }catch(e){
     b.metadataError=e.message||"erreur inconnue";
   }
-  save(); render(); openBook(id);
+
+  render();
+  openBook(id);
+
+  try{
+    await persistCurrentLibraryOrThrow("Mise à jour des métadonnées");
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    openBook(id);
+  }
+
   if(button){button.disabled=false;button.textContent=original;}
 }
 
@@ -1996,17 +2121,34 @@ async function uploadManualCover(bookId,file){
   const path=`covers/${bookId}-${Date.now()}.jpg`;
 
   setCloudStatus("Envoi de la couverture…");
-  await enqueueGithubMutation(()=>githubRequest(
-    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
-    {
-      method:"PUT",
-      body:{
-        message:"Ajout d’une couverture",
-        content:bytesToBase64(bytes),
-        branch:GITHUB_BRANCH
+
+  await enqueueGithubMutation(async()=>{
+    let lastError=null;
+
+    for(let attempt=1;attempt<=4;attempt++){
+      try{
+        await githubRequest(
+          `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+          {
+            method:"PUT",
+            body:{
+              message:"Ajout d’une couverture",
+              content:bytesToBase64(bytes),
+              branch:GITHUB_BRANCH
+            }
+          }
+        );
+        return true;
+      }catch(e){
+        lastError=e;
+        if(!isTransientGithubError(e) || attempt===4)break;
+        setCloudStatus(`Nouvelle tentative photo ${attempt}/3…`);
+        await waitMs(githubRetryDelayMs(e,attempt));
       }
     }
-  ));
+
+    throw lastError||new Error("Échec de l’envoi de la couverture.");
+  });
 
   return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${path}`;
 }
@@ -2015,8 +2157,8 @@ async function saveEdit(id){
   if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
 
-  // This edit becomes the authoritative next write; cancel an obsolete debounce.
   clearTimeout(cloudSaveTimer);
+  const before=librarySnapshotText();
 
   const saveBtn=document.getElementById("saveEditBtn");
   const originalSaveText=saveBtn?.textContent||"Enregistrer";
@@ -2029,7 +2171,8 @@ async function saveEdit(id){
       pendingCoverUpload=null;
     }catch(e){
       if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
-      alert(e.message||"Impossible d’envoyer cette couverture.");
+      setCloudStatus("Non enregistré","error");
+      alert(`Couverture non envoyée.\n\n${githubErrorLabel(e)}`);
       return;
     }
   }
@@ -2058,16 +2201,17 @@ async function saveEdit(id){
     b.editionSelection="manual";
     b.editionVersion="v10";
   }
-  saveLocalCache();
   render();
 
   try{
     if(saveBtn){saveBtn.disabled=true;saveBtn.textContent="Enregistrement…";}
-    await writeCentralLibrary();
+    await persistCurrentLibraryOrThrow("Modification du livre");
     openBook(id);
   }catch(e){
-    // Keep edit modal open so the user can retry without losing the local edit.
-    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText;}
+    // Underlying library returns to the confirmed online state.
+    // The edit form itself stays open with the user's values, so one tap can retry.
+    restoreLibrarySnapshot(before);
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent="Réessayer";}
     return;
   }
 
@@ -2094,19 +2238,27 @@ async function confirmDeleteBook(){
   if(!await ensureEditMode())return;
   if(!pendingDeleteId)return;
   const id=pendingDeleteId;
+  const before=librarySnapshotText();
+  const btn=document.getElementById("confirmDeleteBtn");
+  const original=btn?.textContent||"Oui, supprimer";
 
-  // Tombstone: indispensable pour les livres initiaux codés dans l’application.
-  // Sans cela, un seed supprimé réapparaîtrait au prochain rechargement.
   clearTimeout(cloudSaveTimer);
   deletedIds.add(id);
   books=books.filter(x=>x.id!==id);
-  saveLocalCache();
-  writeCentralLibrary().catch(()=>{});
+  setCloudStatus("Suppression du livre…");
 
-  closeDeleteConfirm();
-  closeEditionChooser();
-  closeEdit();
-  render();
+  if(btn){btn.disabled=true;btn.textContent="Suppression…";}
+
+  try{
+    await persistCurrentLibraryOrThrow("Suppression du livre");
+    closeDeleteConfirm();
+    closeEditionChooser();
+    closeEdit();
+    render();
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    if(btn){btn.disabled=false;btn.textContent=original;}
+  }
 }
 function stripHtml(s){ const d=document.createElement("div"); d.innerHTML=s||""; return d.textContent||""; }
 
@@ -2123,27 +2275,37 @@ function exportData(){
 async function importData(e){
   if(!await ensureEditMode())return;
   const f=e.target.files[0]; if(!f)return;
-  const r=new FileReader(); r.onload=()=>{
-    try{
-      const d=JSON.parse(r.result);
-      if(Array.isArray(d)){
-        // Anciennes sauvegardes V1 : tableau de livres uniquement.
-        books=d;
-        deletedIds=new Set();
-      }else if(d && Array.isArray(d.books)){
-        books=d.books;
-        deletedIds=new Set(Array.isArray(d.deletedIds)?d.deletedIds:[]);
-      }else{
-        throw 0;
-      }
-      save();
-      saveDeleted();
-      render();
-      alert("Bibliothèque importée.");
-    }catch{
+
+  const before=librarySnapshotText();
+
+  try{
+    const text=await f.text();
+    const d=JSON.parse(text);
+
+    if(Array.isArray(d)){
+      books=d;
+      deletedIds=new Set();
+    }else if(d && Array.isArray(d.books)){
+      books=d.books;
+      deletedIds=new Set(Array.isArray(d.deletedIds)?d.deletedIds:[]);
+    }else{
+      throw new Error("Format de sauvegarde invalide.");
+    }
+
+    render();
+    setCloudStatus("Import de la bibliothèque…");
+    await persistCurrentLibraryOrThrow("Import de la bibliothèque");
+    alert("Bibliothèque importée et enregistrée en ligne.");
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    if(String(e?.message||"").includes("GitHub") || Number(e?.status)>=0){
+      // persistCurrentLibraryOrThrow already displayed the GitHub error.
+    }else{
       alert("Fichier invalide.");
     }
-  }; r.readAsText(f);
+  }finally{
+    e.target.value="";
+  }
 }
 </script>
 </body>
