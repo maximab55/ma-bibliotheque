@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v17e</title>
+<title>Ma Bibliothèque · v17f</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -144,6 +144,15 @@
   .cloud-status.error{color:#b42318}
   .photo-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .photo-name{font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .busy-pill{
+    position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
+    display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
+    background:rgba(25,25,25,.92);color:#fff;font-size:11px;font-weight:650;
+    box-shadow:0 5px 18px rgba(0,0,0,.18);pointer-events:none;white-space:nowrap
+  }
+  .busy-pill.show{display:flex}
+  .busy-spinner{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:busySpin .8s linear infinite}
+  @keyframes busySpin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -152,7 +161,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v17e</span>
+        <span class="version-label">v17f</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -248,7 +257,7 @@
 
 
 <script>
-// Ma Bibliothèque V17e — fiabilité des écritures GitHub
+// Ma Bibliothèque V17f — SHA frais + éditions par langue + indicateur d’activité
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -753,6 +762,26 @@ let githubMutationChain=Promise.resolve();
 let lastGithubMutationAt=0;
 let cloudErrorAlerted=false;
 
+let busyDepth=0;
+function showBusy(text="Chargement…"){
+  busyDepth++;
+  const pill=document.getElementById("busyPill");
+  const label=document.getElementById("busyText");
+  if(label)label.textContent=text;
+  if(pill)pill.classList.add("show");
+}
+function updateBusy(text){
+  const label=document.getElementById("busyText");
+  if(label)label.textContent=text;
+}
+function hideBusy(){
+  busyDepth=Math.max(0,busyDepth-1);
+  if(busyDepth===0){
+    const pill=document.getElementById("busyPill");
+    if(pill)pill.classList.remove("show");
+  }
+}
+
 function cloudBackup(){
   return {version:2,books,deletedIds:[...deletedIds]};
 }
@@ -824,6 +853,7 @@ async function githubRequest(path,{method="GET",body=null,token=githubToken}={})
     r=await fetch(GITHUB_API+path,{
       method,
       headers,
+      cache:method==="GET"?"no-store":"default",
       body:body===null?undefined:JSON.stringify(body)
     });
   }catch(networkError){
@@ -1073,6 +1103,7 @@ function writeCentralLibrary(snapshotText=librarySnapshotText()){
 
 async function persistCurrentLibraryOrThrow(context="Modification"){
   const snapshot=librarySnapshotText();
+  showBusy(context+"…");
   try{
     await writeCentralLibrary(snapshot);
     saveLocalCache();
@@ -1081,6 +1112,8 @@ async function persistCurrentLibraryOrThrow(context="Modification"){
     const details=githubErrorLabel(e);
     alert(`${context} non enregistré.\n\n${details}\n\nAucune modification n’a été validée dans la bibliothèque en ligne.`);
     throw e;
+  }finally{
+    hideBusy();
   }
 }
 
@@ -1723,6 +1756,7 @@ async function searchBooks(){
   const q=document.getElementById("bookQuery").value.trim();
   const box=document.getElementById("results");
   if(!q)return;
+  showBusy("Recherche des livres…");
   box.innerHTML='<div class="notice">Recherche dans Google Books et Open Library…</div>';
   try{
     const items=await searchCombinedCatalog(q);
@@ -1743,6 +1777,7 @@ async function searchBooks(){
         isbn:catalogIsbn(item),googleBooksId:item.googleBooksId||(item.source==="google"?item.id:""),
         openLibraryEditionId:item.openLibraryEditionId||(item.source==="openlibrary"?item.id:""),
         openLibraryWorkId:item.openLibraryWorkId||"",catalogSources:sources,
+        editionLanguage:v.language||"",
         metadataCheckedAt:new Date().toISOString(),metadataError:""
       }).replace(/'/g,"&#39;")})'>
         ${img?`<img src="${esc(img)}" data-fallback="${esc(cd.fallback||"")}" onerror="handleCoverError(this)">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
@@ -1751,6 +1786,8 @@ async function searchBooks(){
     }).join("");
   }catch(e){
     box.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche temporairement indisponible")}</div>`;
+  }finally{
+    hideBusy();
   }
 }
 
@@ -1868,6 +1905,20 @@ function openBook(id){
 const editionCandidatesCache=new Map();
 let currentEditionBookId="";
 
+function editionWantedLanguage(book){
+  const lang=String(book?.editionLanguage||"").toLowerCase();
+  if(lang==="en" || lang==="eng")return "en";
+  return "fr";
+}
+function editionLanguageLabel(code){
+  return code==="en"?"anglaises":"françaises";
+}
+function editionMatchesLanguage(entry,code){
+  const lang=String(entry?.item?.volumeInfo?.language||"").toLowerCase();
+  if(code==="en")return lang==="en" || lang==="eng";
+  return lang==="fr" || lang==="fre" || lang==="fra";
+}
+
 function editionIsbn(item){
   const ids=item?.volumeInfo?.industryIdentifiers||[];
   return ids.find(x=>x.type==="ISBN_13")?.identifier ||
@@ -1917,25 +1968,33 @@ async function loadEditionChooser(bookId,extraTerm=""){
   const b=books.find(x=>x.id===bookId); if(!b)return;
   const box=document.getElementById("editionContent");
   const summary=document.getElementById("editionSummary");
-  box.innerHTML='<div class="notice">Recherche approfondie dans Google Books et Open Library…</div>';
+  const wantedLanguage=editionWantedLanguage(b);
+  const languageLabel=editionLanguageLabel(wantedLanguage);
+
+  showBusy(`Recherche des éditions ${languageLabel}…`);
+  box.innerHTML=`<div class="notice">Recherche approfondie des éditions ${languageLabel} dans Google Books et Open Library…</div>`;
   summary.textContent="";
 
   try{
     const ranked=await fetchCombinedEditionCandidates(b.title,b.author,{exhaustive:true,extraTerm});
-    if(!ranked.length){
-      box.innerHTML='<div class="metadata-status warning">Aucune édition pertinente trouvée dans les deux catalogues.</div>';
+    const matching=ranked.filter(entry=>editionMatchesLanguage(entry,wantedLanguage));
+
+    if(!matching.length){
+      box.innerHTML=`<div class="metadata-status warning">Aucune édition ${wantedLanguage==="en"?"anglaise":"française"} pertinente trouvée dans les deux catalogues.</div>`;
+      summary.textContent=`Filtre actif : éditions ${languageLabel} uniquement.`;
       return;
     }
 
     editionCandidatesCache.clear();
-    ranked.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
+    matching.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
+    const shown=matching.slice(0,40);
 
-    const shown=ranked.slice(0,40);
-    summary.textContent=`${ranked.length} édition${ranked.length>1?"s":""} pertinente${ranked.length>1?"s":""} trouvée${ranked.length>1?"s":""}${extraTerm?` pour « ${extraTerm} »`:""}.`;
-
+    summary.textContent=`${matching.length} édition${matching.length>1?"s":""} ${languageLabel} pertinente${matching.length>1?"s":""} trouvée${matching.length>1?"s":""}${extraTerm?` pour « ${extraTerm} »`:""} · autres langues masquées.`;
     box.innerHTML=`<div class="edition-list">${shown.map((entry,index)=>editionCardHtml(bookId,entry,index)).join("")}</div>`;
   }catch(e){
     box.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche temporairement indisponible")}</div>`;
+  }finally{
+    hideBusy();
   }
 }
 
@@ -1987,6 +2046,7 @@ async function retryGoogleMetadata(id,button){
   if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
 
+  showBusy("Recherche des métadonnées…");
   const before=librarySnapshotText();
   const original=button?.textContent||"";
   if(button){button.disabled=true;button.textContent="Recherche des catalogues…";}
@@ -2008,6 +2068,7 @@ async function retryGoogleMetadata(id,button){
 
   render();
   openBook(id);
+  hideBusy();
 
   try{
     await persistCurrentLibraryOrThrow("Mise à jour des métadonnées");
@@ -2116,13 +2177,15 @@ async function compressCoverPhoto(file){
 
 async function uploadManualCover(bookId,file){
   if(!await ensureEditMode())throw new Error("Mode édition requis.");
+  showBusy("Envoi de la couverture…");
   const blob=await compressCoverPhoto(file);
   const bytes=new Uint8Array(await blob.arrayBuffer());
   const path=`covers/${bookId}-${Date.now()}.jpg`;
 
   setCloudStatus("Envoi de la couverture…");
 
-  await enqueueGithubMutation(async()=>{
+  try{
+    await enqueueGithubMutation(async()=>{
     let lastError=null;
 
     for(let attempt=1;attempt<=4;attempt++){
@@ -2147,10 +2210,12 @@ async function uploadManualCover(bookId,file){
       }
     }
 
-    throw lastError||new Error("Échec de l’envoi de la couverture.");
-  });
-
-  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${path}`;
+      throw lastError||new Error("Échec de l’envoi de la couverture.");
+    });
+    return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${path}`;
+  }finally{
+    hideBusy();
+  }
 }
 
 async function saveEdit(id){
@@ -2308,5 +2373,8 @@ async function importData(e){
   }
 }
 </script>
+<div id="busyPill" class="busy-pill" aria-live="polite">
+  <span class="busy-spinner"></span><span id="busyText">Chargement…</span>
+</div>
 </body>
 </html>
