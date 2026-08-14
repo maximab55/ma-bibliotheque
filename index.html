@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v17g</title>
+<title>Ma Bibliothèque · v17h</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -161,7 +161,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v17g</span>
+        <span class="version-label">v17h</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -232,7 +232,9 @@
   <div class="sheet">
     <div class="grab"></div>
     <h2>Changer d’édition</h2>
-    <p class="notice">Je croise Google Books et Open Library. Je privilégie automatiquement les éditions françaises non poche et les dates de publication les plus anciennes. Le sélecteur affiche aussi les éditions de poche.</p>
+    <p class="notice">Je croise Google Books et Open Library. Je privilégie les éditions
+dans la bonne langue, avec une couverture exploitable et un éditeur crédible.
+Pour les classiques, les éditions courantes et les poches reconnus remontent.</p>
     <div class="edition-search">
       <input id="editionSearchTerm" placeholder="Éditeur ou ISBN, ex. Folio, Gallimard, 978…">
       <button class="ghost" onclick="searchEditionChooser()">Chercher</button>
@@ -257,7 +259,7 @@
 
 
 <script>
-// Ma Bibliothèque V17g — classement éditorial intelligent des éditions
+// Ma Bibliothèque V17h — sélection courte + voir plus d’éditions
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -1903,6 +1905,8 @@ function openBook(id){
 
 
 const editionCandidatesCache=new Map();
+const editionDisplayState=new Map();
+
 let currentEditionBookId="";
 
 function editionWantedLanguage(book){
@@ -2052,7 +2056,7 @@ function editionChooserScore(entry,book,profile){
   };
 }
 
-function diversifyEditionResults(ranked,limit=20){
+function diversifyEditionResults(ranked,limit=8){
   const output=[];
   const coverSeen=new Set();
   const publisherCounts=new Map();
@@ -2064,21 +2068,33 @@ function diversifyEditionResults(ranked,limit=20){
     const publisher=normalizedPublisher(item)||"__unknown__";
     const coverKey=editionCoverFingerprint(item);
 
-    // Identical cover = visually redundant regardless of ISBN/year.
+    // Avoid exact visual duplicates in the first shortlist.
     if(coverKey && coverSeen.has(coverKey))continue;
 
-    // Avoid a wall of the same publisher / POD catalogue.
+    // Keep variety, but don't be so strict that only 2-3 books survive.
     const current=publisherCounts.get(publisher)||0;
-    const maxForPublisher=entry.editorialTier==="low"?1:(entry.editorialTier==="trusted"?3:2);
+    const maxForPublisher=entry.editorialTier==="low"?1:(entry.editorialTier==="trusted"?4:3);
     if(current>=maxForPublisher)continue;
 
-    // No-cover records stay available only as a tiny fallback at the bottom.
-    if(!entry.hasCover && noCoverCount>=2)continue;
+    // No-cover results are tolerated only once in the initial shortlist.
+    if(!entry.hasCover && noCoverCount>=1)continue;
 
     output.push(entry);
     publisherCounts.set(publisher,current+1);
     if(coverKey)coverSeen.add(coverKey);
     if(!entry.hasCover)noCoverCount++;
+  }
+
+  // If diversity rules were too strict, fill the shortlist from the ranked list.
+  if(output.length<Math.min(limit,ranked.length)){
+    const selectedKeys=new Set(output.map(x=>catalogItemKey(x.item)));
+    for(const entry of ranked){
+      if(output.length>=limit)break;
+      const key=catalogItemKey(entry.item);
+      if(selectedKeys.has(key))continue;
+      output.push(entry);
+      selectedKeys.add(key);
+    }
   }
 
   return output;
@@ -2093,7 +2109,7 @@ function rankEditionChooserCandidates(entries,book){
   return {
     profile,
     ranked,
-    shown:diversifyEditionResults(ranked,20)
+    shown:diversifyEditionResults(ranked,8)
   };
 }
 
@@ -2142,6 +2158,47 @@ function editionCardHtml(bookId,entry,index){
   </div>`;
 }
 
+function renderEditionResults(bookId){
+  const state=editionDisplayState.get(bookId);
+  if(!state)return;
+
+  const box=document.getElementById("editionContent");
+  const summary=document.getElementById("editionSummary");
+  if(!box||!summary)return;
+
+  const visible=state.ranked.slice(0,state.visibleCount);
+
+  editionCandidatesCache.clear();
+  state.ranked.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
+
+  const modeLabel=state.profile.classic
+    ? "classique : éditions éditoriales actuelles privilégiées, poche autorisé"
+    : "ouvrage récent : édition de référence privilégiée";
+
+  summary.textContent=`${state.totalMatching} édition${state.totalMatching>1?"s":""} ${state.languageLabel} trouvée${state.totalMatching>1?"s":""} · ${visible.length} affichée${visible.length>1?"s":""} · ${modeLabel}${state.extraTerm?` · recherche « ${state.extraTerm} »`:""}.`;
+
+  let html=`<div class="edition-list">${visible.map((entry,index)=>editionCardHtml(bookId,entry,index)).join("")}</div>`;
+
+  if(state.visibleCount<state.ranked.length){
+    const remaining=state.ranked.length-state.visibleCount;
+    const next=Math.min(8,remaining);
+    html+=`<div class="edition-more-wrap">
+      <button class="ghost edition-more-btn" onclick="showMoreEditions('${bookId}')">
+        Voir ${next} édition${next>1?"s":""} de plus
+      </button>
+    </div>`;
+  }
+
+  box.innerHTML=html;
+}
+
+function showMoreEditions(bookId){
+  const state=editionDisplayState.get(bookId);
+  if(!state)return;
+  state.visibleCount=Math.min(state.ranked.length,state.visibleCount+8);
+  renderEditionResults(bookId);
+}
+
 async function loadEditionChooser(bookId,extraTerm=""){
   const b=books.find(x=>x.id===bookId); if(!b)return;
   const box=document.getElementById("editionContent");
@@ -2164,17 +2221,24 @@ async function loadEditionChooser(bookId,extraTerm=""){
     }
 
     const editorial=rankEditionChooserCandidates(matching,b);
-    const shown=editorial.shown;
 
-    editionCandidatesCache.clear();
-    shown.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
+    // Put the diverse shortlist first, then append the rest of the editorial ranking.
+    const shortlistKeys=new Set(editorial.shown.map(x=>catalogItemKey(x.item)));
+    const progressiveRanked=[
+      ...editorial.shown,
+      ...editorial.ranked.filter(x=>!shortlistKeys.has(catalogItemKey(x.item)))
+    ];
 
-    const modeLabel=editorial.profile.classic
-      ? "classique : belles éditions éditoriales récentes privilégiées, poche autorisé"
-      : "ouvrage récent : édition de référence privilégiée";
+    editionDisplayState.set(bookId,{
+      ranked:progressiveRanked,
+      visibleCount:Math.min(8,progressiveRanked.length),
+      totalMatching:matching.length,
+      languageLabel,
+      profile:editorial.profile,
+      extraTerm
+    });
 
-    summary.textContent=`${matching.length} édition${matching.length>1?"s":""} ${languageLabel} trouvée${matching.length>1?"s":""} · ${shown.length} meilleure${shown.length>1?"s":""} affichée${shown.length>1?"s":""} · ${modeLabel}${extraTerm?` · recherche « ${extraTerm} »`:""}.`;
-    box.innerHTML=`<div class="edition-list">${shown.map((entry,index)=>editionCardHtml(bookId,entry,index)).join("")}</div>`;
+    renderEditionResults(bookId);
   }catch(e){
     box.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche temporairement indisponible")}</div>`;
   }finally{
