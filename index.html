@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v17f</title>
+<title>Ma Bibliothèque · v17g</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -161,7 +161,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v17f</span>
+        <span class="version-label">v17g</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -257,7 +257,7 @@
 
 
 <script>
-// Ma Bibliothèque V17f — SHA frais + éditions par langue + indicateur d’activité
+// Ma Bibliothèque V17g — classement éditorial intelligent des éditions
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -1919,6 +1919,184 @@ function editionMatchesLanguage(entry,code){
   return lang==="fr" || lang==="fre" || lang==="fra";
 }
 
+const EDITORIAL_PUBLISHER_MARKERS = [
+  // France / francophone
+  "gallimard","folio","flammarion","gf","livre de poche","le livre de poche",
+  "grasset","stock","seuil","points","actes sud","babel","j ai lu","jai lu",
+  "pocket","librio","albin michel","robert laffont","fayard","calmann levy",
+  "mercure de france","minuit","les editions de minuit","classiques garnier",
+  "garnier","belin","hatier","larousse","hachette","puf","payot","rivages",
+  "bourgois","christian bourgois","dalloz","plon","xo editions","editions de l observatoire",
+  "buchet chastel","philippe rey","iconoclaste","l arche","sarbacane",
+  // English-language publishers, for intentionally English books
+  "faber","penguin","vintage","picador","bloomsbury","harpercollins","harper collins",
+  "random house","knopf","simon schuster","simon & schuster","macmillan","scribner",
+  "little brown","oxford university press","cambridge university press","norton"
+];
+
+const LOW_VALUE_EDITION_MARKERS = [
+  "books on demand","bod books on demand","createspace","independently published",
+  "independent publishing platform","project gutenberg","lulu","kessinger",
+  "forgotten books","fb editions","republique des lettres","république des lettres"
+];
+
+function normalizedPublisher(item){
+  return normText(item?.volumeInfo?.publisher||"");
+}
+
+function publisherEditorialTier(item){
+  const p=normalizedPublisher(item);
+  if(!p)return "unknown";
+  if(LOW_VALUE_EDITION_MARKERS.some(x=>p.includes(normText(x))))return "low";
+  if(EDITORIAL_PUBLISHER_MARKERS.some(x=>p.includes(normText(x))))return "trusted";
+  return "neutral";
+}
+
+function editionHasRealCover(item){
+  const cd=coverDataFromGoogleItem(item);
+  return Boolean(cd.cover||cd.fallback);
+}
+
+function editionCoverFingerprint(item){
+  const cd=coverDataFromGoogleItem(item);
+  const u=String(cd.cover||cd.fallback||"");
+  if(!u)return "";
+  try{
+    const parsed=new URL(u,location.href);
+    parsed.searchParams.delete("zoom");
+    parsed.searchParams.delete("w");
+    parsed.searchParams.delete("h");
+    parsed.searchParams.delete("default");
+    return parsed.hostname+parsed.pathname;
+  }catch(_){
+    return u.replace(/[?&](zoom|w|h|default)=[^&]*/g,"");
+  }
+}
+
+function editionWorkProfile(entries,book){
+  const currentYear=new Date().getFullYear();
+  const years=entries.map(x=>editionYear(x.item)).filter(y=>Number(y)>=1450 && Number(y)<=currentYear+1);
+  const firstKnownYear=years.length?Math.min(...years):null;
+  const fallbackYear=Number(extractYear(book?.publishedDate||book?.year||""))||null;
+  const referenceYear=firstKnownYear||fallbackYear;
+  return {
+    currentYear,
+    referenceYear,
+    classic:Boolean(referenceYear && currentYear-referenceYear>=20)
+  };
+}
+
+function editionChooserScore(entry,book,profile){
+  const item=entry.item;
+  const v=item?.volumeInfo||{};
+  const year=editionYear(item);
+  const tier=publisherEditorialTier(item);
+  const pocket=isPocketEdition(item);
+  const cd=coverDataFromGoogleItem(item);
+  const hasCover=Boolean(cd.cover||cd.fallback);
+
+  // Start with title/author/catalog quality, but editorial usability dominates.
+  let score=scoreGoogleItem(item,book?.title||v.title||"",book?.author||"");
+
+  // A visible cover is essential for this chooser.
+  if(hasCover){
+    score+=24;
+    if(cd.quality==="extraLarge")score+=7;
+    else if(cd.quality==="large")score+=6;
+    else if(cd.quality==="medium")score+=4;
+  }else{
+    score-=52;
+  }
+
+  // Editorial credibility.
+  if(tier==="trusted")score+=38;
+  else if(tier==="low")score-=68;
+  else if(tier==="neutral")score+=4;
+  else score-=6;
+
+  if(v.publisher)score+=4;
+  if(catalogIsbn(item))score+=5;
+  if(v.pageCount)score+=2;
+
+  if(profile.classic){
+    // For classics, do NOT chase the oldest edition. Modern, credible editions
+    // with usable covers are much more relevant to the user.
+    if(year){
+      const age=profile.currentYear-year;
+      if(age<=12)score+=18;
+      else if(age<=25)score+=13;
+      else if(age<=45)score+=7;
+      else if(age>90)score-=4;
+    }
+
+    // Pocket is a legitimate/current reference format for classics.
+    if(pocket && tier!=="low")score+=5;
+  }else{
+    // For recent works, stay close to the original/reference publication.
+    if(year && profile.referenceYear){
+      const delta=Math.abs(year-profile.referenceYear);
+      score+=Math.max(0,30-Math.min(30,delta*3));
+    }
+    // A later pocket edition remains useful, but the launch edition comes first.
+    if(pocket)score-=12;
+  }
+
+  return {
+    ...entry,
+    score,
+    year,
+    pocket,
+    coverData:cd,
+    editorialTier:tier,
+    hasCover
+  };
+}
+
+function diversifyEditionResults(ranked,limit=20){
+  const output=[];
+  const coverSeen=new Set();
+  const publisherCounts=new Map();
+  let noCoverCount=0;
+
+  for(const entry of ranked){
+    if(output.length>=limit)break;
+    const item=entry.item;
+    const publisher=normalizedPublisher(item)||"__unknown__";
+    const coverKey=editionCoverFingerprint(item);
+
+    // Identical cover = visually redundant regardless of ISBN/year.
+    if(coverKey && coverSeen.has(coverKey))continue;
+
+    // Avoid a wall of the same publisher / POD catalogue.
+    const current=publisherCounts.get(publisher)||0;
+    const maxForPublisher=entry.editorialTier==="low"?1:(entry.editorialTier==="trusted"?3:2);
+    if(current>=maxForPublisher)continue;
+
+    // No-cover records stay available only as a tiny fallback at the bottom.
+    if(!entry.hasCover && noCoverCount>=2)continue;
+
+    output.push(entry);
+    publisherCounts.set(publisher,current+1);
+    if(coverKey)coverSeen.add(coverKey);
+    if(!entry.hasCover)noCoverCount++;
+  }
+
+  return output;
+}
+
+function rankEditionChooserCandidates(entries,book){
+  const profile=editionWorkProfile(entries,book);
+  const ranked=entries
+    .map(entry=>editionChooserScore(entry,book,profile))
+    .sort((a,b)=>b.score-a.score || (b.hasCover?1:0)-(a.hasCover?1:0) || (b.year||0)-(a.year||0));
+
+  return {
+    profile,
+    ranked,
+    shown:diversifyEditionResults(ranked,20)
+  };
+}
+
 function editionIsbn(item){
   const ids=item?.volumeInfo?.industryIdentifiers||[];
   return ids.find(x=>x.type==="ISBN_13")?.identifier ||
@@ -1985,11 +2163,17 @@ async function loadEditionChooser(bookId,extraTerm=""){
       return;
     }
 
-    editionCandidatesCache.clear();
-    matching.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
-    const shown=matching.slice(0,40);
+    const editorial=rankEditionChooserCandidates(matching,b);
+    const shown=editorial.shown;
 
-    summary.textContent=`${matching.length} édition${matching.length>1?"s":""} ${languageLabel} pertinente${matching.length>1?"s":""} trouvée${matching.length>1?"s":""}${extraTerm?` pour « ${extraTerm} »`:""} · autres langues masquées.`;
+    editionCandidatesCache.clear();
+    shown.forEach(x=>editionCandidatesCache.set(catalogItemKey(x.item),x.item));
+
+    const modeLabel=editorial.profile.classic
+      ? "classique : belles éditions éditoriales récentes privilégiées, poche autorisé"
+      : "ouvrage récent : édition de référence privilégiée";
+
+    summary.textContent=`${matching.length} édition${matching.length>1?"s":""} ${languageLabel} trouvée${matching.length>1?"s":""} · ${shown.length} meilleure${shown.length>1?"s":""} affichée${shown.length>1?"s":""} · ${modeLabel}${extraTerm?` · recherche « ${extraTerm} »`:""}.`;
     box.innerHTML=`<div class="edition-list">${shown.map((entry,index)=>editionCardHtml(bookId,entry,index)).join("")}</div>`;
   }catch(e){
     box.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche temporairement indisponible")}</div>`;
