@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v18</title>
+<title>Ma Bibliothèque · v18a</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -157,6 +157,10 @@
   .loan-success{text-align:center;padding:18px 4px}
   .loan-success-mark{font-size:32px;margin-bottom:8px}
   .honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+  .suggestions-label{font-size:11px;color:var(--muted);margin:7px 0 5px}
+  .suggestion-chips{display:flex;gap:6px;flex-wrap:wrap}
+  .suggestion-chip{border:1px solid var(--line);background:#f2eee8;color:#514a42;border-radius:999px;padding:6px 9px;font-size:11px;line-height:1;min-height:28px}
+  .suggestion-chip:active{transform:scale(.97)}
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -174,7 +178,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v18</span>
+        <span class="version-label">v18a</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -272,7 +276,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V18 — propriétaires libres + demandes de prêt
+// Ma Bibliothèque V18a — ergonomie édition + suggestions tactiles
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -1247,21 +1251,61 @@ function displayOwner(b){
   return ownerValue(b)||"À compléter";
 }
 
-function ownerSuggestions(){
-  const values=new Set(["À moi"]);
+function splitPeopleNames(value=""){
+  return String(value||"")
+    .split(/[,;]+/)
+    .map(x=>x.trim())
+    .filter(Boolean);
+}
+
+function peopleSuggestions(){
+  const values=new Map();
+
+  const add=name=>{
+    const clean=String(name||"").trim();
+    if(!clean || clean==="Autre")return;
+    const key=normalizedSimpleText(clean);
+    if(!key)return;
+    if(!values.has(key))values.set(key,clean);
+  };
+
+  add("À moi");
+
   books.forEach(book=>{
-    const owner=ownerValue(book);
-    if(owner && owner!=="Autre")values.add(owner);
+    add(ownerValue(book));
+    add(book.loanedTo);
+    splitPeopleNames(book.recommendTo).forEach(add);
   });
-  return [...values].sort((a,b)=>{
+
+  return [...values.values()].sort((a,b)=>{
     if(a==="À moi")return -1;
     if(b==="À moi")return 1;
     return a.localeCompare(b,"fr",{sensitivity:"base"});
   });
 }
 
-function ownerSuggestionsHtml(){
-  return ownerSuggestions().map(name=>`<option value="${esc(name)}"></option>`).join("");
+function ownerSuggestions(){
+  return peopleSuggestions();
+}
+
+function borrowerSuggestions(){
+  return peopleSuggestions().filter(x=>x!=="À moi");
+}
+
+function suggestionChipsHtml(targetId,values){
+  if(!values.length)return "";
+  return `<div class="suggestions-label">Suggestions</div>
+    <div class="suggestion-chips">
+      ${values.map(name=>`<button type="button" class="suggestion-chip" onclick="setSuggestedPerson('${targetId}',${JSON.stringify(name)})">${esc(name)}</button>`).join("")}
+    </div>`;
+}
+
+function setSuggestedPerson(targetId,name){
+  const input=document.getElementById(targetId);
+  if(!input)return;
+  input.value=name;
+  input.dispatchEvent(new Event("input",{bubbles:true}));
+  input.focus();
 }
 
 function normalizedSimpleText(value=""){
@@ -2519,7 +2563,56 @@ async function retryGoogleMetadata(id,button){
   if(button){button.disabled=false;button.textContent=original;}
 }
 
-function closeEdit(){document.getElementById("editModal").classList.remove("open")}
+let currentEditingBookId="";
+let editInitialSignature="";
+
+function editFieldValue(id){
+  const el=document.getElementById(id);
+  return el ? String(el.value??"") : "";
+}
+
+function editFormSignature(){
+  const ids=[
+    "fTitle","fAuthor","fStatus","fPages","fPublisher","fYear","fCategory","fIsbn","fCover",
+    "fDescription","fSource","fRating","fRecommendedBy","fRecommendationCount","fWhy","fReview",
+    "fFormat","fOwner","fRecommend","fLoaned","fPurchaseNote","fStarted","fFinished","fDays"
+  ];
+  return JSON.stringify({
+    fields:ids.map(id=>[id,editFieldValue(id)]),
+    pendingCover:Boolean(pendingCoverUpload && pendingCoverUpload.bookId===currentEditingBookId)
+  });
+}
+
+function captureEditInitialState(id){
+  currentEditingBookId=id;
+  editInitialSignature=editFormSignature();
+}
+
+function editHasUnsavedChanges(){
+  return Boolean(
+    currentEditingBookId &&
+    editInitialSignature &&
+    editFormSignature()!==editInitialSignature
+  );
+}
+
+function cancelEditBook(id){
+  if(editHasUnsavedChanges()){
+    const leave=confirm("Abandonner les modifications non enregistrées ?");
+    if(!leave)return;
+  }
+
+  pendingCoverUpload=null;
+  currentEditingBookId="";
+  editInitialSignature="";
+  openBook(id);
+}
+
+function closeEdit(){
+  currentEditingBookId="";
+  editInitialSignature="";
+  document.getElementById("editModal").classList.remove("open");
+}
 
 async function editBook(id){
   if(!await ensureEditMode())return;
@@ -2564,12 +2657,16 @@ async function editBook(id){
       <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field">
         <label>Propriétaire</label>
-        <input id="fOwner" list="ownerSuggestionsList" value="${esc(ownerValue(b))}" placeholder="À moi, Babeth…">
-        <datalist id="ownerSuggestionsList">${ownerSuggestionsHtml()}</datalist>
+        <input id="fOwner" value="${esc(ownerValue(b))}" placeholder="À moi, Babeth…">
+        ${suggestionChipsHtml("fOwner",ownerSuggestions())}
       </div>
     </div>
     <div class="field"><label>Recommandé pour</label><input id="fRecommend" value="${esc(b.recommendTo||"")}" placeholder="Ex. Laurène, Joseph…"></div>
-    <div class="field"><label>Prêté à</label><input id="fLoaned" value="${esc(b.loanedTo||"")}" placeholder="Laisser vide si le livre n’est pas prêté"></div>
+    <div class="field">
+      <label>Prêté à</label>
+      <input id="fLoaned" value="${esc(b.loanedTo||"")}" placeholder="Laisser vide si le livre n’est pas prêté">
+      ${suggestionChipsHtml("fLoaned",borrowerSuggestions())}
+    </div>
     <div class="field"><label>Note d’achat</label><input id="fPurchaseNote" value="${esc(b.purchaseNote||"")}" placeholder="Ex. Kindle, version anglaise…"></div>
     <div class="row">
       <div class="field"><label>Commencé le</label><input type="date" id="fStarted" value="${esc(b.started||"")}"></div>
@@ -2578,8 +2675,9 @@ async function editBook(id){
     <div class="field"><label>Nombre de jours</label><input type="number" id="fDays" value="${esc(b.readingDays||"")}"></div>
     <div class="toolbar">
       <button class="primary" id="saveEditBtn" onclick="saveEdit('${b.id}')">Enregistrer</button>
-      <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer</button>
+      <button class="ghost" type="button" onclick="cancelEditBook('${b.id}')">Annuler</button>
     </div>`;
+  captureEditInitialState(id);
 }
 
 let pendingCoverUpload=null;
@@ -2713,6 +2811,8 @@ async function saveEdit(id){
   try{
     if(saveBtn){saveBtn.disabled=true;saveBtn.textContent="Enregistrement…";}
     await persistCurrentLibraryOrThrow("Modification du livre");
+    currentEditingBookId="";
+    editInitialSignature="";
     openBook(id);
   }catch(e){
     // Underlying library returns to the confirmed online state.
