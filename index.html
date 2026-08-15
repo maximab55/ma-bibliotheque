@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v17h</title>
+<title>Ma Bibliothèque · v18</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -144,6 +144,19 @@
   .cloud-status.error{color:#b42318}
   .photo-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .photo-name{font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .loan-panel{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .loan-request-btn{width:100%;padding:13px 14px;border-radius:14px;font-size:14px;font-weight:700}
+  .loan-status{display:flex;align-items:center;gap:7px;margin-top:14px;padding:11px 13px;border-radius:13px;background:#ece8e1;color:#675f55;font-size:13px;font-weight:650}
+  .loan-status::before{content:"●";font-size:8px;color:#9a8f80}
+  .loan-intro{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 14px}
+  .loan-book{display:flex;gap:12px;align-items:center;margin:0 0 14px;padding:10px;border-radius:14px;background:#f2eee8}
+  .loan-book-cover{width:50px;aspect-ratio:2/3;border-radius:6px;overflow:hidden;background:#ddd3c5;flex:0 0 auto}
+  .loan-book-cover img{width:100%;height:100%;object-fit:cover}
+  .loan-book-title{font-weight:750;line-height:1.2}
+  .loan-book-author{font-size:12px;color:var(--muted);margin-top:3px}
+  .loan-success{text-align:center;padding:18px 4px}
+  .loan-success-mark{font-size:32px;margin-bottom:8px}
+  .honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -161,7 +174,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v17h</span>
+        <span class="version-label">v18</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -259,11 +272,12 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V17h — sélection courte + voir plus d’éditions
+// Ma Bibliothèque V18 — propriétaires libres + demandes de prêt
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
 const OPEN_LIBRARY_BASE_URL = "https://openlibrary.org";
+const FORMSPREE_LOAN_ENDPOINT = "https://formspree.io/f/mwleneag";
 
 function googleBooksUrl(query, maxResults=20, startIndex=0, langRestrict=""){
   const params = new URLSearchParams({
@@ -1222,9 +1236,67 @@ function displayFormat(format=""){
   return format || "À compléter";
 }
 
+function ownerValue(b){
+  const owner=String(b?.owner||"").trim();
+  const borrowed=String(b?.borrowedFrom||"").trim();
+  if(owner && owner!=="Autre")return owner;
+  return borrowed;
+}
+
 function displayOwner(b){
-  if(b.owner==="Autre" && b.borrowedFrom) return b.borrowedFrom;
-  return b.owner || b.borrowedFrom || "À compléter";
+  return ownerValue(b)||"À compléter";
+}
+
+function ownerSuggestions(){
+  const values=new Set(["À moi"]);
+  books.forEach(book=>{
+    const owner=ownerValue(book);
+    if(owner && owner!=="Autre")values.add(owner);
+  });
+  return [...values].sort((a,b)=>{
+    if(a==="À moi")return -1;
+    if(b==="À moi")return 1;
+    return a.localeCompare(b,"fr",{sensitivity:"base"});
+  });
+}
+
+function ownerSuggestionsHtml(){
+  return ownerSuggestions().map(name=>`<option value="${esc(name)}"></option>`).join("");
+}
+
+function normalizedSimpleText(value=""){
+  return String(value||"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().trim();
+}
+
+function isOwnedByMe(b){
+  const owner=normalizedSimpleText(ownerValue(b));
+  return owner==="a moi" || owner==="moi";
+}
+
+function isPhysicalBook(b){
+  return b?.format==="Livre papier";
+}
+
+function canRequestLoan(b){
+  return Boolean(
+    b &&
+    b.status!=="À acheter" &&
+    isPhysicalBook(b) &&
+    isOwnedByMe(b) &&
+    !String(b.loanedTo||"").trim()
+  );
+}
+
+function isPubliclyLoaned(b){
+  return Boolean(
+    b &&
+    b.status!=="À acheter" &&
+    isPhysicalBook(b) &&
+    isOwnedByMe(b) &&
+    String(b.loanedTo||"").trim()
+  );
 }
 
 function render(){
@@ -1847,7 +1919,7 @@ function openBook(id){
       <button class="edition-link" onclick="openEditionChooser('${b.id}')">Changer d’édition</button>
       ${missingMetadata(b).length?`<button class="edition-link" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer la recherche</button>`:""}
     </div>`:""}
-    ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement : priorité au français, aux éditions non poche et aux éditions les plus anciennes disponibles.</div>`:""}
+    ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement selon la langue, la qualité des métadonnées et la pertinence éditoriale disponible.</div>`:""}
     ${b.coverQuality&&b.coverQuality.startsWith("upscaled-")?`<div class="notice" style="margin-top:8px">Google Books ne fournit qu’une petite image pour cette édition. Une version agrandie est utilisée.</div>`:""}
     ${b.description?`<div class="block"><h3>Résumé</h3>
       <p id="summary-${b.id}" class="summary-text ${summaryNeedsToggle(b.description)?"collapsed":""}">${esc(stripHtml(b.description))}</p>
@@ -1887,12 +1959,16 @@ function openBook(id){
           <div class="reading-label">Recommandé pour</div>
           <div class="reading-value">${esc(b.recommendTo)}</div>
         </div>`:""}
-        ${b.loanedTo?`<div class="reading-item">
+        ${b.loanedTo && editMode?`<div class="reading-item">
           <div class="reading-label">Prêté à</div>
           <div class="reading-value">${esc(b.loanedTo)}</div>
         </div>`:""}
       </div>
     </div>`:""}
+    ${canRequestLoan(b)?`<div class="loan-panel">
+      <button class="primary loan-request-btn" onclick="openLoanRequest('${b.id}')">Demander à l’emprunter</button>
+    </div>`:""}
+    ${isPubliclyLoaned(b) && !editMode?`<div class="loan-status">Actuellement prêté</div>`:""}
     <div class="toolbar">
       ${editMode?`<button class="primary" onclick="editBook('${b.id}')">Modifier</button>`:""}
       <button class="ghost" onclick="closeEdit()">Fermer</button>
@@ -1901,6 +1977,121 @@ function openBook(id){
       <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer de ma bibliothèque</button>
     </div>`:""}`;
   document.getElementById("editModal").classList.add("open");
+}
+
+
+let currentLoanBookId="";
+
+function openLoanRequest(id){
+  const b=books.find(x=>x.id===id); if(!b)return;
+  if(!canRequestLoan(b)){
+    openBook(id);
+    return;
+  }
+
+  currentLoanBookId=id;
+  document.getElementById("editContent").innerHTML=`
+    <h2>Demander à emprunter</h2>
+    <div class="loan-book">
+      <div class="loan-book-cover">${coverImgHtml(b,false)}</div>
+      <div>
+        <div class="loan-book-title">${esc(b.title)}</div>
+        <div class="loan-book-author">${esc(b.author||"")}</div>
+      </div>
+    </div>
+    <p class="loan-intro">La demande sera envoyée directement au propriétaire de la bibliothèque.</p>
+    <form id="loanRequestForm" onsubmit="submitLoanRequest(event,'${b.id}')">
+      <div class="field">
+        <label>Prénom *</label>
+        <input id="loanName" name="name" autocomplete="given-name" required placeholder="Ton prénom">
+      </div>
+      <div class="field">
+        <label>Email <span style="font-weight:400">(facultatif)</span></label>
+        <input id="loanEmail" name="email" type="email" inputmode="email" autocomplete="email" placeholder="Facultatif">
+      </div>
+      <div class="field">
+        <label>Message <span style="font-weight:400">(facultatif)</span></label>
+        <textarea id="loanMessage" name="message" placeholder="Ex. Je peux le récupérer ce week-end."></textarea>
+      </div>
+      <div class="honeypot" aria-hidden="true">
+        <label>Ne pas remplir ce champ<input id="loanGotcha" name="_gotcha" tabindex="-1" autocomplete="off"></label>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="loanSubmitBtn" type="submit">Envoyer la demande</button>
+        <button class="ghost" type="button" onclick="openBook('${b.id}')">Retour</button>
+      </div>
+    </form>`;
+}
+
+async function submitLoanRequest(event,bookId){
+  event.preventDefault();
+
+  const b=books.find(x=>x.id===bookId);
+  if(!b || !canRequestLoan(b)){
+    alert("Ce livre n’est plus disponible pour une demande de prêt.");
+    if(b)openBook(bookId);
+    return;
+  }
+
+  const name=document.getElementById("loanName")?.value.trim()||"";
+  const email=document.getElementById("loanEmail")?.value.trim()||"";
+  const message=document.getElementById("loanMessage")?.value.trim()||"";
+  const gotcha=document.getElementById("loanGotcha")?.value||"";
+
+  if(!name){
+    alert("Indique ton prénom.");
+    return;
+  }
+
+  const btn=document.getElementById("loanSubmitBtn");
+  const original=btn?.textContent||"Envoyer la demande";
+  if(btn){btn.disabled=true;btn.textContent="Envoi…";}
+  showBusy("Envoi de la demande…");
+
+  const formData=new FormData();
+  formData.append("name",name);
+  if(email)formData.append("email",email);
+  if(message)formData.append("message",message);
+  if(gotcha)formData.append("_gotcha",gotcha);
+  formData.append("Livre",b.title||"");
+  formData.append("Auteur",b.author||"");
+  formData.append("ISBN",b.isbn||"");
+  formData.append("Format",displayFormat(b.format));
+  formData.append("Demande","Prêt de livre");
+  formData.append("_subject",`Demande de prêt — ${b.title} — ${name}`);
+
+  try{
+    const response=await fetch(FORMSPREE_LOAN_ENDPOINT,{
+      method:"POST",
+      headers:{"Accept":"application/json"},
+      body:formData
+    });
+
+    if(!response.ok){
+      let detail="";
+      try{
+        const data=await response.json();
+        detail=data?.error || data?.errors?.map(x=>x.message).filter(Boolean).join(" · ") || "";
+      }catch(_){}
+      throw new Error(detail||`Erreur ${response.status}`);
+    }
+
+    document.getElementById("editContent").innerHTML=`
+      <div class="loan-success">
+        <div class="loan-success-mark">✓</div>
+        <h2>Demande envoyée</h2>
+        <p class="loan-intro"><strong>${esc(name)}</strong>, ta demande pour <strong>${esc(b.title)}</strong> a bien été envoyée.</p>
+        <div class="toolbar">
+          <button class="primary" onclick="closeEdit()">Fermer</button>
+          <button class="ghost" onclick="openBook('${b.id}')">Voir le livre</button>
+        </div>
+      </div>`;
+  }catch(e){
+    alert(`La demande n’a pas pu être envoyée.\n\n${e.message||"Réessaie dans quelques instants."}`);
+    if(btn){btn.disabled=false;btn.textContent=original;}
+  }finally{
+    hideBusy();
+  }
 }
 
 
@@ -2371,9 +2562,12 @@ async function editBook(id){
     <div class="field"><label>Mon avis</label><textarea id="fReview">${esc(b.review||"")}</textarea></div>
     <div class="row">
       <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field"><label>Propriété</label><select id="fOwner">${["À moi","Babeth","Autre"].map(x=>`<option ${b.owner===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field">
+        <label>Propriétaire</label>
+        <input id="fOwner" list="ownerSuggestionsList" value="${esc(ownerValue(b))}" placeholder="À moi, Babeth…">
+        <datalist id="ownerSuggestionsList">${ownerSuggestionsHtml()}</datalist>
+      </div>
     </div>
-    <div class="field"><label>Propriétaire (si autre)</label><input id="fBorrowed" value="${esc(b.borrowedFrom||"")}" placeholder="Ex. Babeth"></div>
     <div class="field"><label>Recommandé pour</label><input id="fRecommend" value="${esc(b.recommendTo||"")}" placeholder="Ex. Laurène, Joseph…"></div>
     <div class="field"><label>Prêté à</label><input id="fLoaned" value="${esc(b.loanedTo||"")}" placeholder="Laisser vide si le livre n’est pas prêté"></div>
     <div class="field"><label>Note d’achat</label><input id="fPurchaseNote" value="${esc(b.purchaseNote||"")}" placeholder="Ex. Kindle, version anglaise…"></div>
@@ -2504,7 +2698,7 @@ async function saveEdit(id){
     recommendedBy:fRecommendedBy.value.trim(),
     recommendationCount:Math.max(0,Number(fRecommendationCount.value)||0),
     rating:Number(fRating.value)||0,why:fWhy.value.trim(),
-    review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value,borrowedFrom:fBorrowed.value.trim(),
+    review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value.trim(),borrowedFrom:"",
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),
     purchaseNote:fPurchaseNote.value.trim(),
     started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
