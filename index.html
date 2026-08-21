@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20b</title>
+<title>Ma Bibliothèque · v20c</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -235,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20b">v20b</span>
+        <span class="version-label" onclick="adminTap()" title="v20c">v20c</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -354,7 +354,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20b — recherche web de couvertures via Cloudflare + SerpApi
+// Ma Bibliothèque V20c — changement de couverture direct depuis la fiche
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -2775,6 +2775,7 @@ function openBook(id,syncUrl=true){
     ${(()=>{const ms=metadataState(b);return ms.kind==="ok"?"":`<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
     ${canEditNow()?`<div class="edition-actions">
       <button class="edition-link" onclick="openEditionChooser('${b.id}')">Changer d’édition</button>
+      <button class="edition-link" onclick="openCoverManager('${b.id}')">Changer de couverture</button>
       ${missingMetadata(b).length?`<button class="edition-link" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer la recherche</button>`:""}
     </div>`:""}
     ${b.editionSelection==="auto"?`<div class="notice" style="margin-top:8px">Édition choisie automatiquement selon la langue, la qualité des métadonnées et la pertinence éditoriale disponible.</div>`:""}
@@ -3502,6 +3503,124 @@ async function editBook(id){
 }
 
 
+let coverManagerBookId="";
+
+function openCoverManager(bookId){
+  const b=books.find(x=>x.id===bookId); if(!b)return;
+  if(!canEditNow())return;
+
+  coverManagerBookId=bookId;
+  const current=b.cover||b.coverFallback||"";
+
+  document.getElementById("editContent").innerHTML=`
+    <h2>Changer de couverture</h2>
+
+    <div class="loan-book" style="align-items:flex-start">
+      <div class="loan-book-cover" style="width:72px">
+        ${current
+          ? `<img src="${esc(current)}" style="width:100%;height:100%;object-fit:cover">`
+          : ""}
+      </div>
+      <div>
+        <div class="loan-book-title">${esc(b.title)}</div>
+        <div class="loan-book-author">${esc(b.author||"")}</div>
+        <div class="loan-intro" style="margin-top:8px">Couverture actuellement enregistrée.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <button type="button" class="ghost" style="width:100%"
+        onclick="searchWebCovers('${b.id}','manager')">
+        🌐 Chercher une couverture sur le web
+      </button>
+      <div id="webCoverPanelManager-${b.id}"></div>
+    </div>
+
+    <div class="field">
+      <button type="button" class="ghost" style="width:100%"
+        onclick="document.getElementById('coverManagerFile-${b.id}').click()">
+        📷 Choisir une photo
+      </button>
+      <input type="file" id="coverManagerFile-${b.id}" accept="image/*" hidden
+        onchange="handleCoverManagerPhoto(event,'${b.id}')">
+    </div>
+
+    <div class="field">
+      <label>Ou utiliser une URL d’image</label>
+      <input id="coverManagerUrl" type="url" placeholder="https://…">
+      <button type="button" class="ghost" style="width:100%;margin-top:8px"
+        onclick="useCoverManagerUrl('${b.id}')">
+        Utiliser cette URL
+      </button>
+    </div>
+
+    <div class="toolbar">
+      <button class="ghost" onclick="openBook('${b.id}')">Retour</button>
+    </div>`;
+}
+
+async function saveCoverManagerFile(bookId,file,quality="manual"){
+  if(!await ensureEditMode())return;
+  const b=books.find(x=>x.id===bookId); if(!b)return;
+
+  const before=librarySnapshotText();
+  showBusy("Enregistrement de la couverture…");
+
+  try{
+    const newCover=await uploadManualCover(bookId,file);
+    b.cover=newCover;
+    b.coverFallback="";
+    b.coverQualityVersion=quality;
+    b.editionLocked=true;
+    render();
+    await persistCurrentLibraryOrThrow("Mise à jour de la couverture");
+    openBook(bookId);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    if(!String(e?.message||"").includes("GitHub")){
+      alert(`La couverture n’a pas pu être enregistrée.\n\n${e?.message||"Réessaie dans quelques instants."}`);
+    }
+  }finally{
+    hideBusy();
+  }
+}
+
+async function handleCoverManagerPhoto(event,bookId){
+  const file=event.target.files?.[0];
+  if(!file)return;
+  try{
+    await saveCoverManagerFile(bookId,file,"manual");
+  }finally{
+    event.target.value="";
+  }
+}
+
+async function useCoverManagerUrl(bookId){
+  const raw=document.getElementById("coverManagerUrl")?.value.trim()||"";
+  if(!raw){
+    alert("Colle d’abord une URL d’image.");
+    return;
+  }
+
+  try{
+    const parsed=new URL(raw);
+    if(!["http:","https:"].includes(parsed.protocol))throw new Error();
+  }catch(_){
+    alert("Cette URL n’est pas valide.");
+    return;
+  }
+
+  showBusy("Récupération de l’image…");
+  try{
+    const file=await fetchWebCoverAsFile(raw,bookId,"URL");
+    await saveCoverManagerFile(bookId,file,"url");
+  }catch(e){
+    alert(`Impossible d’utiliser cette image.\n\n${e?.message||"Réessaie avec une autre URL."}`);
+  }finally{
+    hideBusy();
+  }
+}
+
 const webCoverState=new Map();
 
 function currentCoverSearchData(bookId,context="edit"){
@@ -3521,9 +3640,9 @@ function currentCoverSearchData(bookId,context="edit"){
 }
 
 function webCoverPanelId(bookId,context){
-  return context==="duplicate"
-    ? `webCoverPanelDuplicate-${bookId}`
-    : `webCoverPanelEdit-${bookId}`;
+  if(context==="duplicate")return `webCoverPanelDuplicate-${bookId}`;
+  if(context==="manager")return `webCoverPanelManager-${bookId}`;
+  return `webCoverPanelEdit-${bookId}`;
 }
 
 function webCoverQuery(data){
@@ -3676,8 +3795,8 @@ async function selectWebCover(bookId,context,index){
       return;
     }
 
-    // Duplicate ISBN flow: selecting a web cover is an explicit correction,
-    // so save it immediately to the existing book.
+    // Duplicate ISBN and dedicated cover-manager flows:
+    // selecting an image is an explicit cover correction, so save immediately.
     const b=books.find(x=>x.id===bookId);
     if(!b)return;
 
@@ -3690,8 +3809,11 @@ async function selectWebCover(bookId,context,index){
       b.editionLocked=true;
       render();
       await persistCurrentLibraryOrThrow("Mise à jour de la couverture");
-      pendingDuplicateCandidate=null;
-      await closeAdd();
+
+      if(context==="duplicate"){
+        pendingDuplicateCandidate=null;
+        await closeAdd();
+      }
       openBook(bookId);
     }catch(e){
       restoreLibrarySnapshot(before);
