@@ -3,10 +3,10 @@
   "books": [
     {
       "id": "b1787296507699",
-      "status": "À lire",
+      "status": "En cours",
       "rating": 0,
       "review": "",
-      "format": "",
+      "format": "Livre audio",
       "owner": "À moi",
       "borrowedFrom": "",
       "loanedTo": "",
@@ -26,7 +26,7 @@
       "title": "Sapiens",
       "author": "Yuval Noah Harari",
       "publisher": "Bompiani",
-      "year": 2022,
+      "year": "2022",
       "publishedDate": [
         "Sep 01, 2022"
       ],
