@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ma Bibliothèque">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v18b</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
+<title>Ma Bibliothèque · v19</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -14,7 +20,8 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
   button,input,select,textarea{font:inherit}
-  .app{max-width:980px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(58px + env(safe-area-inset-bottom))}
+  .app{max-width:980px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))}
+  body.owner-mode .app{padding-bottom:calc(58px + env(safe-area-inset-bottom))}
   header{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:14px}
   h1{font-size:31px;line-height:1.05;margin:0}
   .title-line{display:flex;align-items:baseline;gap:7px}
@@ -65,7 +72,8 @@
   .author{font-size:12px;color:var(--muted);margin-top:3px}
   .badge{display:inline-block;font-size:11px;padding:5px 8px;border-radius:999px;background:var(--green);margin-top:6px}
   .empty{border:1px dashed #cfc6bb;border-radius:18px;padding:26px;text-align:center;color:var(--muted)}
-  .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:20}
+  .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));display:none;justify-content:center;z-index:20}
+  body.owner-mode .bottom{display:flex}
   .bottom-inner{max-width:980px;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
   .bottom-inner::-webkit-scrollbar{display:none}
   .bottom button{flex:0 0 auto;border-radius:999px;padding:7px 10px;font-size:11px;line-height:1;min-height:30px;white-space:nowrap}
@@ -161,6 +169,8 @@
   .suggestion-chips{display:flex;gap:6px;flex-wrap:wrap}
   .suggestion-chip{border:1px solid var(--line);background:#f2eee8;color:#514a42;border-radius:999px;padding:6px 9px;font-size:11px;line-height:1;min-height:28px}
   .suggestion-chip:active{transform:scale(.97)}
+  .share-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+  .offline-note{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -178,11 +188,11 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v18b</span>
+        <span class="version-label" onclick="adminTap()" title="v19">v19</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
-    <button class="primary" id="editOnlyAdd" onclick="openAdd()">＋ Ajouter</button>
+    <button class="primary" id="editOnlyAdd" style="display:none" onclick="openAdd()">＋ Ajouter</button>
   </header>
 
   <div class="search">
@@ -213,10 +223,11 @@
   <div class="grid" id="grid"></div>
 </div>
 
-<div class="bottom">
+<div class="bottom" id="ownerBottom">
   <div class="bottom-inner">
-    <button class="ghost" onclick="exportData()">Exporter</button>
+    <button class="ghost" id="adminExport" onclick="exportData()">Exporter</button>
     <button class="ghost" id="editOnlyImport" onclick="document.getElementById('importFile').click()">Importer</button>
+    <button class="ghost" id="installAppBtn" onclick="installApp()">Installer</button>
     <button class="ghost" id="editModeBtn" onclick="toggleEditMode()">Édition</button>
     <div class="cloud-row"><span id="cloudStatus" class="cloud-status">Chargement…</span></div>
     <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)">
@@ -276,7 +287,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V18b — ajout du format livre audio
+// Ma Bibliothèque V19 — PWA + hors ligne + interface publique + partage
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -755,6 +766,8 @@ for(const b of books){
 }
 const CLOUD_CACHE_KEY="mybooks-cloud-cache-v1";
 const GITHUB_TOKEN_KEY="mybooks-github-token-v1";
+const ADMIN_QUERY_REQUESTED=new URLSearchParams(location.search).get("admin")==="1";
+let adminRequested=ADMIN_QUERY_REQUESTED || Boolean(localStorage.getItem(GITHUB_TOKEN_KEY));
 const GITHUB_OWNER="maximab55";
 const GITHUB_REPO="ma-bibliotheque";
 const GITHUB_BRANCH="main";
@@ -837,13 +850,49 @@ function setCloudStatus(text,kind=""){
   el.className="cloud-status"+(kind?" "+kind:"");
 }
 
+let adminTapCount=0;
+let adminTapTimer=null;
+
+function adminTap(){
+  adminTapCount++;
+  clearTimeout(adminTapTimer);
+  adminTapTimer=setTimeout(()=>{adminTapCount=0},2500);
+
+  if(adminTapCount>=5){
+    adminTapCount=0;
+    adminRequested=true;
+    updateEditUI();
+  }
+}
+
+function canEditNow(){
+  return Boolean(editMode && cloudReady && navigator.onLine);
+}
+
 function updateEditUI(){
+  const writable=canEditNow();
+  const ownerChrome=Boolean(adminRequested || editMode || localStorage.getItem(GITHUB_TOKEN_KEY));
+
+  document.body.classList.toggle("owner-mode",ownerChrome);
+
   const add=document.getElementById("editOnlyAdd");
   const imp=document.getElementById("editOnlyImport");
+  const exp=document.getElementById("adminExport");
   const btn=document.getElementById("editModeBtn");
-  if(add) add.style.display=editMode?"":"none";
-  if(imp) imp.style.display=editMode?"":"none";
-  if(btn) btn.textContent=editMode?"Quitter édition":"Édition";
+  const install=document.getElementById("installAppBtn");
+
+  if(add)add.style.display=writable?"":"none";
+  if(imp)imp.style.display=writable?"":"none";
+  if(exp)exp.style.display=editMode?"":"none";
+
+  if(btn){
+    btn.style.display=ownerChrome?"":"none";
+    btn.textContent=editMode?"Quitter édition":"Édition";
+  }
+
+  if(install){
+    install.style.display=(ownerChrome && !isStandaloneApp())?"":"none";
+  }
 }
 
 function bytesToBase64(bytes){
@@ -987,7 +1036,16 @@ async function activateEditMode(){
     await validateGithubToken(token.trim());
     githubToken=token.trim();
     editMode=true;
+    adminRequested=true;
     localStorage.setItem(GITHUB_TOKEN_KEY,githubToken);
+
+    // Once the device is authorized, keep the public URL clean.
+    if(new URLSearchParams(location.search).get("admin")==="1"){
+      const u=new URL(location.href);
+      u.searchParams.delete("admin");
+      history.replaceState(null,"",u.pathname+(u.search?u.search:"")+u.hash);
+    }
+
     updateEditUI();
     setCloudStatus("Bibliothèque en ligne · mode édition","ok");
     return true;
@@ -1011,6 +1069,7 @@ async function toggleEditMode(){
     githubToken="";
     librarySha="";
     localStorage.removeItem(GITHUB_TOKEN_KEY);
+    adminRequested=ADMIN_QUERY_REQUESTED;
     updateEditUI();
     setCloudStatus("Bibliothèque en ligne · mode lecture","ok");
     closeEdit();
@@ -1018,6 +1077,10 @@ async function toggleEditMode(){
 }
 
 async function ensureEditMode(){
+  if(!navigator.onLine || !cloudReady){
+    alert("Le mode hors ligne est disponible en lecture uniquement. Reconnecte-toi pour modifier la bibliothèque.");
+    return false;
+  }
   if(editMode)return true;
   return await activateEditMode();
 }
@@ -1045,6 +1108,7 @@ async function loadCentralLibrary(){
     cloudReady=true;
     saveLocalCache();
     render();
+    openBookFromUrl();
     setCloudStatus("Bibliothèque en ligne · mode lecture","ok");
 
     const storedToken=localStorage.getItem(GITHUB_TOKEN_KEY);
@@ -1065,7 +1129,9 @@ async function loadCentralLibrary(){
   }catch(e){
     cloudReady=false;
     render();
+    openBookFromUrl();
     setCloudStatus("Hors ligne · copie locale affichée","error");
+    updateEditUI();
   }
 }
 
@@ -1359,9 +1425,79 @@ function render(){
       <span class="badge">${esc(b.status)}</span>
     </div>`).join("");
 }
+let deferredInstallPrompt=null;
+
+function isStandaloneApp(){
+  return Boolean(
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    window.navigator.standalone===true
+  );
+}
+
+window.addEventListener("beforeinstallprompt",event=>{
+  event.preventDefault();
+  deferredInstallPrompt=event;
+  updateEditUI();
+});
+
+window.addEventListener("appinstalled",()=>{
+  deferredInstallPrompt=null;
+  updateEditUI();
+});
+
+async function installApp(){
+  if(isStandaloneApp())return;
+
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    try{await deferredInstallPrompt.userChoice}catch(_){}
+    deferredInstallPrompt=null;
+    updateEditUI();
+    return;
+  }
+
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS){
+    alert("Sur iPhone : touche le bouton Partager de Safari, puis « Sur l’écran d’accueil ».");
+  }else{
+    alert("Dans ton navigateur, utilise « Installer l’application » ou « Ajouter à l’écran d’accueil ».");
+  }
+}
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(err=>console.warn("Service worker:",err));
+  });
+}
+
+window.addEventListener("online",()=>{
+  setCloudStatus("Chargement de la bibliothèque en ligne…");
+  loadCentralLibrary();
+  updateEditUI();
+});
+
+window.addEventListener("offline",()=>{
+  cloudReady=false;
+  setCloudStatus("Hors ligne · copie locale affichée","error");
+  updateEditUI();
+  const openId=bookIdFromUrl();
+  if(openId)openBook(openId,false);
+});
+
+window.addEventListener("hashchange",()=>{
+  const id=bookIdFromUrl();
+  if(id){
+    openBookFromUrl();
+  }else{
+    const modal=document.getElementById("editModal");
+    if(modal?.classList.contains("open"))modal.classList.remove("open");
+  }
+});
+
 document.getElementById("sortSelect").value=sortMode;
 updateEditUI();
 render();
+openBookFromUrl();
 loadCentralLibrary();
 
 function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -1935,6 +2071,66 @@ async function chooseResult(data){
   }
 }
 
+function publicBaseUrl(){
+  const u=new URL(location.href);
+  u.searchParams.delete("admin");
+  u.hash="";
+  return u;
+}
+
+function bookShareUrl(id){
+  const u=publicBaseUrl();
+  u.hash=`book=${encodeURIComponent(id)}`;
+  return u.toString();
+}
+
+function bookIdFromUrl(){
+  const raw=String(location.hash||"").replace(/^#/,"");
+  if(!raw.startsWith("book="))return "";
+  try{return decodeURIComponent(raw.slice(5))}catch(_){return raw.slice(5)}
+}
+
+function syncBookUrl(id){
+  const u=publicBaseUrl();
+  if(id)u.hash=`book=${encodeURIComponent(id)}`;
+  history.replaceState(null,"",u.pathname+(u.search?u.search:"")+u.hash);
+}
+
+function openBookFromUrl(){
+  const id=bookIdFromUrl();
+  if(!id)return false;
+  const exists=books.some(b=>b.id===id);
+  if(!exists)return false;
+  openBook(id,false);
+  return true;
+}
+
+async function shareBook(id){
+  const b=books.find(x=>x.id===id);if(!b)return;
+  const url=bookShareUrl(id);
+  const data={
+    title:`${b.title}${b.author?` — ${b.author}`:""}`,
+    text:`${b.title}${b.author?` de ${b.author}`:""}`,
+    url
+  };
+
+  try{
+    if(navigator.share){
+      await navigator.share(data);
+      return;
+    }
+  }catch(e){
+    if(e?.name==="AbortError")return;
+  }
+
+  try{
+    await navigator.clipboard.writeText(url);
+    alert("Lien du livre copié.");
+  }catch(_){
+    window.prompt("Copie ce lien :",url);
+  }
+}
+
 function summaryNeedsToggle(text=""){
   return stripHtml(String(text||"")).trim().length > 520;
 }
@@ -1946,8 +2142,9 @@ function toggleSummary(id,button){
   button.textContent=isCollapsed?"Lire la suite":"Réduire";
 }
 
-function openBook(id){
+function openBook(id,syncUrl=true){
   const b=books.find(x=>x.id===id); if(!b)return;
+  if(syncUrl)syncBookUrl(id);
   document.getElementById("editContent").innerHTML=`
     <div class="detail-top">
       <div class="detail-cover">${coverImgHtml(b,false)}</div>
@@ -1959,7 +2156,7 @@ function openBook(id){
       </div>
     </div>
     ${(()=>{const ms=metadataState(b);return ms.kind==="ok"?"":`<div class="metadata-status ${ms.kind}">${esc(ms.text)}</div>`})()}
-    ${editMode?`<div class="edition-actions">
+    ${canEditNow()?`<div class="edition-actions">
       <button class="edition-link" onclick="openEditionChooser('${b.id}')">Changer d’édition</button>
       ${missingMetadata(b).length?`<button class="edition-link" onclick="retryGoogleMetadata('${b.id}',this)">Réessayer la recherche</button>`:""}
     </div>`:""}
@@ -2014,10 +2211,11 @@ function openBook(id){
     </div>`:""}
     ${isPubliclyLoaned(b) && !editMode?`<div class="loan-status">Actuellement prêté</div>`:""}
     <div class="toolbar">
-      ${editMode?`<button class="primary" onclick="editBook('${b.id}')">Modifier</button>`:""}
+      ${canEditNow()?`<button class="primary" onclick="editBook('${b.id}')">Modifier</button>`:""}
+      <button class="ghost share-btn" onclick="shareBook('${b.id}')">Partager</button>
       <button class="ghost" onclick="closeEdit()">Fermer</button>
     </div>
-    ${editMode?`<div class="delete-zone">
+    ${canEditNow()?`<div class="delete-zone">
       <button class="danger-link" onclick="askDeleteBook('${b.id}')">Supprimer de ma bibliothèque</button>
     </div>`:""}`;
   document.getElementById("editModal").classList.add("open");
@@ -2612,6 +2810,7 @@ function closeEdit(){
   currentEditingBookId="";
   editInitialSignature="";
   document.getElementById("editModal").classList.remove("open");
+  if(bookIdFromUrl())syncBookUrl("");
 }
 
 async function editBook(id){

@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Ma Bibliothèque",
+  "short_name": "Bibliothèque",
+  "description": "Ma bibliothèque personnelle, mes lectures et mes prêts.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3ee",
+  "theme_color": "#f6f3ee",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
