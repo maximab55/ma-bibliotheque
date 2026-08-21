@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20</title>
+<title>Ma Bibliothèque · v20b</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -195,6 +195,29 @@
   .isbn-confirm-title{font-weight:800;font-size:16px;line-height:1.2}
   .isbn-confirm-meta{font-size:12px;color:var(--muted);line-height:1.45;margin-top:4px}
   .isbn-confirm .primary{width:100%;margin-top:11px}
+  .cover-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+  .cover-choice{min-width:0;border:1px solid var(--line);border-radius:13px;padding:9px;background:#fff;text-align:center}
+  .cover-choice-label{font-size:10px;color:var(--muted);font-weight:700;margin-bottom:7px;text-transform:uppercase;letter-spacing:.03em}
+  .cover-choice-img{width:86px;height:129px;max-width:100%;object-fit:cover;border-radius:7px;background:#e9e4dc;margin:0 auto;display:block}
+  .cover-choice-empty{width:86px;height:129px;max-width:100%;border-radius:7px;background:#eee9e2;color:#938a80;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:11px;padding:8px}
+  .cover-match-note{font-size:11px;color:var(--muted);line-height:1.4;margin:7px 0 0}
+  .cover-actions{display:grid;gap:8px;margin-top:10px}
+  .cover-actions button{width:100%}
+  .web-cover-panel{margin-top:10px;border:1px solid var(--line);border-radius:15px;padding:11px;background:#f7f4ef}
+  .web-cover-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:9px}
+  .web-cover-title{font-size:13px;font-weight:800}
+  .web-cover-subtitle{font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px}
+  .web-cover-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .web-cover-card{border:1px solid var(--line);background:#fff;border-radius:11px;padding:6px;min-width:0;text-align:left}
+  .web-cover-card img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:7px;background:#e8e3dc}
+  .web-cover-source{font-size:9px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:5px}
+  .web-cover-dims{font-size:8px;color:var(--muted);margin-top:2px}
+  .web-cover-card:active{transform:scale(.98)}
+  .web-cover-more{width:100%;margin-top:9px}
+  .web-cover-selected{display:flex;gap:9px;align-items:center;margin-top:9px;padding:8px;border-radius:11px;background:#e9f2e9}
+  .web-cover-selected img{width:42px;height:63px;object-fit:cover;border-radius:5px}
+  .web-cover-selected-text{font-size:11px;color:#415342;line-height:1.35}
+  @media(max-width:420px){.web-cover-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -212,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20">v20</span>
+        <span class="version-label" onclick="adminTap()" title="v20b">v20b</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -331,12 +354,13 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20 — scanner ISBN + ajout exact + anti-doublons
+// Ma Bibliothèque V20b — recherche web de couvertures via Cloudflare + SerpApi
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
 const OPEN_LIBRARY_BASE_URL = "https://openlibrary.org";
 const FORMSPREE_LOAN_ENDPOINT = "https://formspree.io/f/mwleneag";
+const WEB_COVER_WORKER = "https://dry-poetry-5c73.ledeglingo.workers.dev";
 
 function googleBooksUrl(query, maxResults=20, startIndex=0, langRestrict=""){
   const params = new URLSearchParams({
@@ -2182,18 +2206,139 @@ function forcePendingDuplicateAdd(){
   chooseResult(data,{forceDuplicate:true});
 }
 
+function normalizedCoverUrl(url=""){
+  const raw=String(url||"").trim();
+  if(!raw)return "";
+  try{
+    const u=new URL(raw,location.href);
+    ["zoom","w","h","edge","default"].forEach(k=>u.searchParams.delete(k));
+    return `${u.hostname}${u.pathname}`.toLowerCase();
+  }catch(_){
+    return raw.toLowerCase().replace(/[?&](zoom|w|h|edge|default)=[^&]*/g,"");
+  }
+}
+
+function coverCompareCard(label,url){
+  return `<div class="cover-choice">
+    <div class="cover-choice-label">${esc(label)}</div>
+    ${url
+      ? `<img class="cover-choice-img" src="${esc(url)}" onerror="this.outerHTML='<div class=&quot;cover-choice-empty&quot;>Image indisponible</div>'">`
+      : `<div class="cover-choice-empty">Aucune couverture</div>`}
+  </div>`;
+}
+
+async function useDetectedCoverForExisting(id){
+  if(!await ensureEditMode())return;
+  const data=pendingDuplicateCandidate;
+  const b=books.find(x=>x.id===id);
+  const detected=String(data?.cover||data?.coverFallback||"").trim();
+  if(!b || !detected){
+    alert("Aucune couverture exploitable n’a été trouvée pour cet ISBN.");
+    return;
+  }
+
+  const before=librarySnapshotText();
+  showBusy("Mise à jour de la couverture…");
+  try{
+    b.cover=detected;
+    b.coverFallback="";
+    b.coverQualityVersion="isbn-scan";
+    b.editionLocked=true;
+    render();
+    await persistCurrentLibraryOrThrow("Mise à jour de la couverture");
+    pendingDuplicateCandidate=null;
+    await closeAdd();
+    openBook(id);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+  }finally{
+    hideBusy();
+  }
+}
+
+function choosePhysicalCoverPhoto(id){
+  const input=document.getElementById(`duplicateCoverFile-${id}`);
+  if(input)input.click();
+}
+
+async function handleDuplicateCoverPhoto(event,id){
+  const file=event.target.files?.[0];
+  if(!file)return;
+  if(!await ensureEditMode())return;
+
+  const b=books.find(x=>x.id===id);
+  if(!b)return;
+
+  const before=librarySnapshotText();
+  showBusy("Envoi de la photo de couverture…");
+
+  try{
+    const newCover=await uploadManualCover(id,file);
+    b.cover=newCover;
+    b.coverFallback="";
+    b.coverQualityVersion="manual";
+    b.editionLocked=true;
+    render();
+    await persistCurrentLibraryOrThrow("Mise à jour de la couverture");
+    pendingDuplicateCandidate=null;
+    await closeAdd();
+    openBook(id);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+    if(!String(e?.message||"").includes("GitHub")){
+      alert(`La couverture n’a pas pu être enregistrée.\n\n${e?.message||"Réessaie dans quelques instants."}`);
+    }
+  }finally{
+    hideBusy();
+    event.target.value="";
+  }
+}
+
+async function keepCurrentCoverAndOpen(id){
+  pendingDuplicateCandidate=null;
+  await closeAdd();
+  openBook(id);
+}
+
 function showDuplicateGuard(data,existing,kind){
   pendingDuplicateCandidate=data;
   const box=document.getElementById("results");
   if(!box)return;
 
   if(kind==="isbn"){
+    const currentCover=String(existing.cover||existing.coverFallback||"").trim();
+    const detectedCover=String(data.cover||data.coverFallback||"").trim();
+    const sameCover=Boolean(
+      currentCover && detectedCover &&
+      normalizedCoverUrl(currentCover)===normalizedCoverUrl(detectedCover)
+    );
+
     box.innerHTML=`<div class="duplicate-box">
       <div class="duplicate-title">Cette édition est déjà dans ta bibliothèque.</div>
-      <div class="duplicate-text">L’ISBN <strong>${esc(cleanIsbn(data.isbn))}</strong> correspond déjà à cette fiche.</div>
+      <div class="duplicate-text">L’ISBN <strong>${esc(cleanIsbn(data.isbn))}</strong> correspond déjà à cette fiche. L’ISBN identifie bien l’édition, mais une même édition peut avoir plusieurs couvertures selon le tirage.</div>
       ${duplicateBookHtml(existing)}
-      <div class="duplicate-actions">
-        <button class="primary" onclick="openExistingFromDuplicate('${existing.id}')">Voir ma fiche</button>
+
+      <div class="cover-compare">
+        ${coverCompareCard("Couverture actuelle",currentCover)}
+        ${coverCompareCard("Trouvée pour cet ISBN",detectedCover)}
+      </div>
+      <div class="cover-match-note">${sameCover
+        ? "Le catalogue renvoie actuellement la même couverture que celle enregistrée. Si ton exemplaire physique est différent, utilise ta propre photo."
+        : detectedCover
+          ? "Le catalogue renvoie une autre couverture pour le même ISBN. Choisis celle qui correspond réellement à ton exemplaire."
+          : "Le catalogue n’a pas fourni d’autre couverture exploitable pour cet ISBN. Tu peux photographier directement ton exemplaire."}</div>
+
+      <div class="cover-actions">
+        <button class="primary" onclick="keepCurrentCoverAndOpen('${existing.id}')">Garder ma couverture actuelle</button>
+        ${detectedCover && !sameCover?`<button class="ghost" onclick="useDetectedCoverForExisting('${existing.id}')">Utiliser la couverture détectée</button>`:""}
+        <button class="ghost" onclick="choosePhysicalCoverPhoto('${existing.id}')">📷 Utiliser une photo de mon exemplaire</button>
+        <button class="ghost" onclick="searchWebCovers('${existing.id}','duplicate')">🌐 Chercher la couverture sur le web</button>
+        <input type="file" id="duplicateCoverFile-${existing.id}" accept="image/*" hidden onchange="handleDuplicateCoverPhoto(event,'${existing.id}')">
+      </div>
+      <div id="webCoverPanelDuplicate-${existing.id}"></div>
+
+      <div class="duplicate-actions" style="margin-top:12px">
+        <button class="ghost" onclick="openExistingFromDuplicate('${existing.id}')">Voir ma fiche</button>
         <button class="ghost" onclick="openExistingEditionChooser('${existing.id}')">Changer d’édition</button>
       </div>
     </div>`;
@@ -3311,6 +3456,11 @@ async function editBook(id){
       </div>
       <input type="file" id="fCoverFile" accept="image/*" hidden onchange="handleCoverFileSelected(event,'${b.id}')">
     </div>
+    <div class="field">
+      <label>Ou chercher une couverture sur le web</label>
+      <button type="button" class="ghost" style="width:100%" onclick="searchWebCovers('${b.id}','edit')">🌐 Chercher une couverture sur le web</button>
+      <div id="webCoverPanelEdit-${b.id}"></div>
+    </div>
     <div class="field"><label>Résumé</label><textarea id="fDescription">${esc(stripHtml(b.description||""))}</textarea></div>
     <div class="row">
       <div class="field"><label>Source</label><select id="fSource">
@@ -3350,6 +3500,214 @@ async function editBook(id){
     </div>`;
   captureEditInitialState(id);
 }
+
+
+const webCoverState=new Map();
+
+function currentCoverSearchData(bookId,context="edit"){
+  const b=books.find(x=>x.id===bookId)||{};
+  if(context==="edit"){
+    return {
+      title:(document.getElementById("fTitle")?.value||b.title||"").trim(),
+      author:(document.getElementById("fAuthor")?.value||b.author||"").trim(),
+      isbn:cleanIsbn(document.getElementById("fIsbn")?.value||b.isbn||"")
+    };
+  }
+  return {
+    title:String(b.title||"").trim(),
+    author:String(b.author||"").trim(),
+    isbn:cleanIsbn(b.isbn||"")
+  };
+}
+
+function webCoverPanelId(bookId,context){
+  return context==="duplicate"
+    ? `webCoverPanelDuplicate-${bookId}`
+    : `webCoverPanelEdit-${bookId}`;
+}
+
+function webCoverQuery(data){
+  return [data.title,data.author,data.isbn,"couverture livre"]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function webCoverCardHtml(bookId,context,item,index){
+  const preview=item.thumbnail||item.original||"";
+  const original=item.original||item.thumbnail||"";
+  const dims=item.width&&item.height?`${item.width}×${item.height}`:"";
+  return `<button type="button" class="web-cover-card"
+      onclick="selectWebCover('${bookId}','${context}',${index})">
+    <img src="${esc(preview)}" loading="lazy" onerror="this.style.opacity='.22'">
+    <div class="web-cover-source">${esc(item.source||"Web")}</div>
+    ${dims?`<div class="web-cover-dims">${esc(dims)}</div>`:""}
+  </button>`;
+}
+
+function renderWebCoverResults(bookId,context){
+  const key=`${context}:${bookId}`;
+  const state=webCoverState.get(key);
+  const panel=document.getElementById(webCoverPanelId(bookId,context));
+  if(!state||!panel)return;
+
+  const visible=state.images.slice(0,state.visibleCount);
+
+  panel.innerHTML=`<div class="web-cover-panel">
+    <div class="web-cover-head">
+      <div>
+        <div class="web-cover-title">Couvertures trouvées sur le web</div>
+        <div class="web-cover-subtitle">${esc(state.query)} · Amazon est priorisé avant Fnac. L’image choisie sera copiée dans ton propre dossier GitHub.</div>
+      </div>
+    </div>
+    <div class="web-cover-grid">
+      ${visible.map((item,index)=>webCoverCardHtml(bookId,context,item,index)).join("")}
+    </div>
+    ${state.visibleCount<state.images.length
+      ? `<button type="button" class="ghost web-cover-more" onclick="showMoreWebCovers('${bookId}','${context}')">Voir plus de couvertures</button>`
+      : ""}
+    <div id="webCoverSelected-${context}-${bookId}"></div>
+  </div>`;
+}
+
+function showMoreWebCovers(bookId,context){
+  const key=`${context}:${bookId}`;
+  const state=webCoverState.get(key);
+  if(!state)return;
+  state.visibleCount=Math.min(state.images.length,state.visibleCount+9);
+  renderWebCoverResults(bookId,context);
+}
+
+async function searchWebCovers(bookId,context="edit"){
+  if(!await ensureEditMode())return;
+
+  const data=currentCoverSearchData(bookId,context);
+  const query=webCoverQuery(data);
+  const panel=document.getElementById(webCoverPanelId(bookId,context));
+  if(!panel)return;
+
+  if(!data.title){
+    panel.innerHTML='<div class="metadata-status warning">Le titre du livre est nécessaire pour chercher une couverture.</div>';
+    return;
+  }
+
+  panel.innerHTML='<div class="notice">Recherche de couvertures sur le web…</div>';
+  showBusy("Recherche de couvertures…");
+
+  try{
+    const response=await fetch(`${WEB_COVER_WORKER}/search?q=${encodeURIComponent(query)}`,{
+      headers:{"Accept":"application/json"},
+      cache:"no-store"
+    });
+
+    const dataJson=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(dataJson.error||`Erreur ${response.status}`);
+
+    const images=Array.isArray(dataJson.images)?dataJson.images:[];
+    if(!images.length){
+      panel.innerHTML='<div class="metadata-status warning">Aucune couverture exploitable trouvée sur le web.</div>';
+      return;
+    }
+
+    webCoverState.set(`${context}:${bookId}`,{
+      query:dataJson.query||query,
+      images,
+      visibleCount:Math.min(9,images.length)
+    });
+    renderWebCoverResults(bookId,context);
+  }catch(e){
+    panel.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche web indisponible")}</div>`;
+  }finally{
+    hideBusy();
+  }
+}
+
+async function fetchWebCoverAsFile(imageUrl,bookId,source="Web"){
+  const response=await fetch(`${WEB_COVER_WORKER}/image?url=${encodeURIComponent(imageUrl)}`,{
+    headers:{"Accept":"image/*"},
+    cache:"no-store"
+  });
+
+  if(!response.ok){
+    let message=`Image inaccessible (${response.status})`;
+    try{
+      const data=await response.json();
+      if(data?.error)message=data.error;
+    }catch(_){}
+    throw new Error(message);
+  }
+
+  const blob=await response.blob();
+  if(!String(blob.type||"").startsWith("image/")){
+    throw new Error("La ressource récupérée n’est pas une image.");
+  }
+
+  const ext=blob.type.includes("png")?"png":"jpg";
+  return new File([blob],`couverture-${bookId}-${source}.${ext}`,{type:blob.type||"image/jpeg"});
+}
+
+async function selectWebCover(bookId,context,index){
+  const state=webCoverState.get(`${context}:${bookId}`);
+  const item=state?.images?.[index];
+  if(!item)return;
+
+  const imageUrl=item.original||item.thumbnail||"";
+  if(!imageUrl)return;
+
+  const selected=document.getElementById(`webCoverSelected-${context}-${bookId}`);
+  if(selected)selected.innerHTML='<div class="notice">Préparation de cette couverture…</div>';
+  showBusy("Préparation de la couverture…");
+
+  try{
+    const file=await fetchWebCoverAsFile(imageUrl,bookId,item.source||"Web");
+
+    if(context==="edit"){
+      pendingCoverUpload={bookId,file};
+      const label=document.getElementById("fCoverFileName");
+      if(label)label.textContent=`Web · ${item.source||"source"}`;
+
+      if(selected){
+        selected.innerHTML=`<div class="web-cover-selected">
+          <img src="${esc(item.thumbnail||imageUrl)}">
+          <div class="web-cover-selected-text"><strong>Couverture sélectionnée</strong><br>${esc(item.source||"Web")} · elle sera copiée dans GitHub quand tu appuieras sur Enregistrer.</div>
+        </div>`;
+      }
+      return;
+    }
+
+    // Duplicate ISBN flow: selecting a web cover is an explicit correction,
+    // so save it immediately to the existing book.
+    const b=books.find(x=>x.id===bookId);
+    if(!b)return;
+
+    const before=librarySnapshotText();
+    try{
+      const newCover=await uploadManualCover(bookId,file);
+      b.cover=newCover;
+      b.coverFallback="";
+      b.coverQualityVersion="web";
+      b.editionLocked=true;
+      render();
+      await persistCurrentLibraryOrThrow("Mise à jour de la couverture");
+      pendingDuplicateCandidate=null;
+      await closeAdd();
+      openBook(bookId);
+    }catch(e){
+      restoreLibrarySnapshot(before);
+      throw e;
+    }
+  }catch(e){
+    if(selected){
+      selected.innerHTML=`<div class="metadata-status error">${esc(e.message||"Impossible d’utiliser cette image.")}</div>`;
+    }else{
+      alert(e.message||"Impossible d’utiliser cette image.");
+    }
+  }finally{
+    hideBusy();
+  }
+}
+
 
 let pendingCoverUpload=null;
 
