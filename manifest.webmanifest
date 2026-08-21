@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Ma Bibliothèque",
   "short_name": "Bibliothèque",
-  "description": "Ma bibliothèque personnelle, mes lectures et mes prêts.",
+  "description": "Ma bibliothèque personnelle : lectures, prêts, partage et ajout rapide par ISBN.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

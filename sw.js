@@ -1,5 +1,5 @@
 // Ma Bibliothèque V19 — service worker
-const VERSION="v19";
+const VERSION="v20";
 const SHELL_CACHE=`ma-bibliotheque-shell-${VERSION}`;
 const DATA_CACHE=`ma-bibliotheque-data-${VERSION}`;
 const IMAGE_CACHE=`ma-bibliotheque-images-${VERSION}`;
@@ -81,6 +81,15 @@ self.addEventListener("fetch",event=>{
     !request.headers.has("authorization")
   ){
     event.respondWith(networkFirst(request,DATA_CACHE,{ignoreSearch:true}));
+    return;
+  }
+
+  // Scanner library: pinned dependency cached after first use.
+  if(
+    url.hostname==="unpkg.com" &&
+    url.pathname.includes("/html5-qrcode@2.3.8/")
+  ){
+    event.respondWith(cacheFirst(request,SHELL_CACHE));
     return;
   }
 

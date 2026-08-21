@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v19</title>
+<title>Ma Bibliothèque · v20</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -171,6 +171,30 @@
   .suggestion-chip:active{transform:scale(.97)}
   .share-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px}
   .offline-note{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
+  .add-separator{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:11px}
+  .add-separator::before,.add-separator::after{content:"";height:1px;background:var(--line);flex:1}
+  .isbn-row{display:flex;gap:8px;align-items:stretch}
+  .isbn-row input{flex:1;min-width:0}
+  .isbn-row button{flex:0 0 auto}
+  .scanner-panel{display:none;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:16px;background:#f2eee8}
+  .scanner-panel.open{display:block}
+  #isbnReader{width:100%;overflow:hidden;border-radius:12px;background:#111;min-height:180px}
+  #isbnReader video{border-radius:12px!important}
+  .scanner-help{font-size:12px;color:var(--muted);line-height:1.4;margin:8px 0 0}
+  .scanner-status{font-size:12px;font-weight:650;margin:8px 0;color:#514a42}
+  .duplicate-box{margin-top:12px;border:1px solid #d7c9b6;background:#f6efe5;border-radius:15px;padding:13px}
+  .duplicate-title{font-weight:800;margin-bottom:5px}
+  .duplicate-text{font-size:12px;color:#665c50;line-height:1.45}
+  .duplicate-book{display:flex;gap:10px;align-items:center;margin:11px 0}
+  .duplicate-book img{width:46px;height:69px;object-fit:cover;border-radius:6px;background:#ddd}
+  .duplicate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .duplicate-actions button{flex:1 1 140px}
+  .isbn-confirm{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#fff}
+  .isbn-confirm-head{display:flex;gap:12px;align-items:center}
+  .isbn-confirm-head img{width:58px;height:87px;object-fit:cover;border-radius:7px;background:#ddd;flex:0 0 auto}
+  .isbn-confirm-title{font-weight:800;font-size:16px;line-height:1.2}
+  .isbn-confirm-meta{font-size:12px;color:var(--muted);line-height:1.45;margin-top:4px}
+  .isbn-confirm .primary{width:100%;margin-top:11px}
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -188,7 +212,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v19">v19</span>
+        <span class="version-label" onclick="adminTap()" title="v20">v20</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -243,7 +267,27 @@
       <input id="bookQuery" placeholder="Ex. Le joueur d'échecs Zweig">
     </div>
     <button class="primary" style="width:100%" onclick="searchBooks()">Chercher automatiquement</button>
-    <p class="notice">La recherche interroge Google Books et Open Library. Tes notes et ta bibliothèque ne sont pas envoyées.</p>
+
+    <div class="add-separator">ou</div>
+
+    <button class="ghost" style="width:100%" onclick="startIsbnScanner()">📷 Scanner le code-barres ISBN</button>
+
+    <div class="scanner-panel" id="isbnScannerPanel">
+      <div id="isbnReader"></div>
+      <div class="scanner-status" id="isbnScannerStatus">Place le code-barres du livre dans le cadre.</div>
+      <p class="scanner-help">La caméra arrière est utilisée. Le scan s’arrête automatiquement dès qu’un ISBN est reconnu.</p>
+      <div class="toolbar"><button class="ghost" onclick="stopIsbnScanner()">Arrêter la caméra</button></div>
+    </div>
+
+    <div class="field" style="margin-top:12px">
+      <label>Ou saisir un ISBN</label>
+      <div class="isbn-row">
+        <input id="manualIsbn" inputmode="numeric" autocomplete="off" placeholder="978… ou ISBN-10">
+        <button class="ghost" onclick="lookupManualIsbn()">Chercher</button>
+      </div>
+    </div>
+
+    <p class="notice">La recherche interroge Google Books et Open Library. Le scanner sert uniquement à identifier l’édition exacte du livre.</p>
     <div class="results" id="results"></div>
     <div class="toolbar"><button class="ghost" onclick="closeAdd()">Fermer</button></div>
   </div>
@@ -287,7 +331,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V19 — PWA + hors ligne + interface publique + partage
+// Ma Bibliothèque V20 — scanner ISBN + ajout exact + anti-doublons
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -842,7 +886,10 @@ function setCloudStatus(text,kind=""){
     "Suppression du livre…":"Suppression…",
     "Mise à jour de l’édition…":"Mise à jour…",
     "Import de la bibliothèque…":"Import…",
-    "Non enregistré":"Non enregistré"
+    "Non enregistré":"Non enregistré",
+    "Recherche de l’ISBN…":"ISBN…",
+    "ISBN détecté · recherche de l’édition…":"ISBN détecté…",
+    "Ouverture de la caméra…":"Caméra…"
   };
 
   el.textContent=compact[text]||text;
@@ -2003,8 +2050,419 @@ async function enrichImportedBuyBooks(){
 }
 // V17: enrichissement automatique de masse désactivé.
 
-async function openAdd(){ if(!await ensureEditMode())return; document.getElementById("addModal").classList.add("open"); document.getElementById("bookQuery").focus(); }
-function closeAdd(){ document.getElementById("addModal").classList.remove("open"); document.getElementById("results").innerHTML=""; }
+const HTML5_QRCODE_URL="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+let isbnScanner=null;
+let isbnScannerStarting=false;
+let isbnScanHandled=false;
+let pendingDuplicateCandidate=null;
+
+function cleanIsbn(value=""){
+  return String(value||"").toUpperCase().replace(/[^0-9X]/g,"");
+}
+
+function isbn13Valid(isbn){
+  const x=cleanIsbn(isbn);
+  if(!/^\d{13}$/.test(x))return false;
+  let sum=0;
+  for(let i=0;i<12;i++)sum+=Number(x[i])*(i%2?3:1);
+  const check=(10-(sum%10))%10;
+  return check===Number(x[12]);
+}
+
+function isbn10Valid(isbn){
+  const x=cleanIsbn(isbn);
+  if(!/^\d{9}[\dX]$/.test(x))return false;
+  let sum=0;
+  for(let i=0;i<10;i++){
+    const digit=x[i]==="X"?10:Number(x[i]);
+    sum+=digit*(10-i);
+  }
+  return sum%11===0;
+}
+
+function isbnValid(isbn){
+  const x=cleanIsbn(isbn);
+  return x.length===13?isbn13Valid(x):isbn10Valid(x);
+}
+
+function isBookBarcode(isbn){
+  const x=cleanIsbn(isbn);
+  return x.length===13 && isbn13Valid(x) && (x.startsWith("978")||x.startsWith("979"));
+}
+
+function normalizeBookIsbn(value=""){
+  return cleanIsbn(value);
+}
+
+function catalogItemToBookData(item){
+  const v=item?.volumeInfo||{};
+  const cd=coverDataFromGoogleItem(item);
+  const sources=(item.sources||[item.source==="openlibrary"?"Open Library":"Google Books"]).join(" + ");
+  return {
+    title:v.title||"",
+    author:(v.authors||[]).join(", "),
+    publisher:v.publisher||"",
+    year:extractYear(v.publishedDate||"")||"",
+    publishedDate:v.publishedDate||"",
+    pages:v.pageCount||"",
+    category:(v.categories||[])[0]||"",
+    description:v.description||"",
+    cover:cd.cover||cd.fallback||"",
+    coverFallback:cd.fallback||"",
+    coverQuality:cd.quality||"",
+    coverQualityVersion:"v10",
+    isbn:catalogIsbn(item),
+    googleBooksId:item.googleBooksId||(item.source==="google"?item.id:""),
+    openLibraryEditionId:item.openLibraryEditionId||(item.source==="openlibrary"?item.id:""),
+    openLibraryWorkId:item.openLibraryWorkId||"",
+    catalogSources:sources,
+    editionLanguage:v.language||"",
+    metadataCheckedAt:new Date().toISOString(),
+    metadataError:""
+  };
+}
+
+function sameBookTitleAuthor(book,data){
+  const t1=normText(book?.title||"");
+  const t2=normText(data?.title||"");
+  if(!t1||!t2)return false;
+
+  const titleMatch=t1===t2 ||
+    (tokenOverlap(t1,t2)>=0.82 && (t1.includes(t2)||t2.includes(t1)||Math.min(t1.length,t2.length)>8));
+  if(!titleMatch)return false;
+
+  const a1=normText(book?.author||"");
+  const a2=normText(data?.author||"");
+  if(!a1||!a2)return true;
+
+  if(a1===a2 || a1.includes(a2) || a2.includes(a1))return true;
+  const last1=a1.split(" ").filter(Boolean).pop()||"";
+  const last2=a2.split(" ").filter(Boolean).pop()||"";
+  return Boolean(last1 && last2 && last1===last2);
+}
+
+function findExactIsbnDuplicate(data){
+  const isbn=normalizeBookIsbn(data?.isbn||"");
+  if(!isbn)return null;
+  return books.find(b=>normalizeBookIsbn(b.isbn||"")===isbn)||null;
+}
+
+function findSameWorkDuplicate(data){
+  return books.find(b=>sameBookTitleAuthor(b,data))||null;
+}
+
+function duplicateBookHtml(book){
+  const cover=book?.cover||book?.coverFallback||"";
+  return `<div class="duplicate-book">
+    ${cover?`<img src="${esc(cover)}" onerror="this.style.visibility='hidden'">`:""}
+    <div>
+      <strong>${esc(book?.title||"")}</strong>
+      <div class="duplicate-text">${esc(book?.author||"")}${book?.isbn?`<br>ISBN ${esc(book.isbn)}`:""}</div>
+    </div>
+  </div>`;
+}
+
+function openExistingFromDuplicate(id){
+  pendingDuplicateCandidate=null;
+  closeAdd();
+  openBook(id);
+}
+
+function openExistingEditionChooser(id){
+  pendingDuplicateCandidate=null;
+  closeAdd();
+  openBook(id);
+  setTimeout(()=>openEditionChooser(id),150);
+}
+
+function forcePendingDuplicateAdd(){
+  if(!pendingDuplicateCandidate)return;
+  const data=pendingDuplicateCandidate;
+  pendingDuplicateCandidate=null;
+  chooseResult(data,{forceDuplicate:true});
+}
+
+function showDuplicateGuard(data,existing,kind){
+  pendingDuplicateCandidate=data;
+  const box=document.getElementById("results");
+  if(!box)return;
+
+  if(kind==="isbn"){
+    box.innerHTML=`<div class="duplicate-box">
+      <div class="duplicate-title">Cette édition est déjà dans ta bibliothèque.</div>
+      <div class="duplicate-text">L’ISBN <strong>${esc(cleanIsbn(data.isbn))}</strong> correspond déjà à cette fiche.</div>
+      ${duplicateBookHtml(existing)}
+      <div class="duplicate-actions">
+        <button class="primary" onclick="openExistingFromDuplicate('${existing.id}')">Voir ma fiche</button>
+        <button class="ghost" onclick="openExistingEditionChooser('${existing.id}')">Changer d’édition</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  box.innerHTML=`<div class="duplicate-box">
+    <div class="duplicate-title">Ce livre semble déjà présent.</div>
+    <div class="duplicate-text">Le titre et l’auteur correspondent à une fiche existante, mais l’ISBN est différent. Il peut s’agir d’une autre édition.</div>
+    ${duplicateBookHtml(existing)}
+    <div class="duplicate-actions">
+      <button class="primary" onclick="openExistingFromDuplicate('${existing.id}')">Voir l’existant</button>
+      <button class="ghost" onclick="openExistingEditionChooser('${existing.id}')">Changer l’édition existante</button>
+      <button class="ghost" onclick="forcePendingDuplicateAdd()">Ajouter quand même</button>
+    </div>
+  </div>`;
+}
+
+async function ensureHtml5Qrcode(){
+  if(window.Html5Qrcode && window.Html5QrcodeSupportedFormats)return true;
+
+  const existing=document.getElementById("html5QrcodeLib");
+  if(existing){
+    return await new Promise((resolve,reject)=>{
+      if(window.Html5Qrcode)return resolve(true);
+      existing.addEventListener("load",()=>resolve(true),{once:true});
+      existing.addEventListener("error",()=>reject(new Error("Bibliothèque de scan indisponible.")),{once:true});
+      setTimeout(()=>window.Html5Qrcode?resolve(true):reject(new Error("Chargement du scanner trop long.")),12000);
+    });
+  }
+
+  return await new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.id="html5QrcodeLib";
+    script.src=HTML5_QRCODE_URL;
+    script.async=true;
+    script.onload=()=>resolve(true);
+    script.onerror=()=>reject(new Error("Impossible de charger le scanner ISBN."));
+    document.head.appendChild(script);
+    setTimeout(()=>window.Html5Qrcode?resolve(true):reject(new Error("Chargement du scanner trop long.")),12000);
+  });
+}
+
+async function stopIsbnScanner(){
+  isbnScanHandled=false;
+  const panel=document.getElementById("isbnScannerPanel");
+  if(isbnScanner){
+    try{
+      const state=isbnScanner.getState?.();
+      if(state===2 || state===3)await isbnScanner.stop();
+    }catch(_){
+      try{await isbnScanner.stop()}catch(__){}
+    }
+    try{await isbnScanner.clear()}catch(_){}
+    isbnScanner=null;
+  }
+  if(panel)panel.classList.remove("open");
+}
+
+async function startIsbnScanner(){
+  if(!await ensureEditMode())return;
+  if(!navigator.mediaDevices?.getUserMedia){
+    alert("La caméra n’est pas disponible dans ce navigateur. Utilise la saisie ISBN manuelle.");
+    return;
+  }
+  if(isbnScannerStarting)return;
+
+  isbnScannerStarting=true;
+  isbnScanHandled=false;
+  const panel=document.getElementById("isbnScannerPanel");
+  const status=document.getElementById("isbnScannerStatus");
+  if(panel)panel.classList.add("open");
+  if(status)status.textContent="Ouverture de la caméra…";
+  showBusy("Ouverture de la caméra…");
+
+  try{
+    await ensureHtml5Qrcode();
+    if(isbnScanner)await stopIsbnScanner();
+    if(panel)panel.classList.add("open");
+
+    isbnScanner=new Html5Qrcode(
+      "isbnReader",
+      {formatsToSupport:[Html5QrcodeSupportedFormats.EAN_13],verbose:false}
+    );
+
+    await isbnScanner.start(
+      {facingMode:"environment"},
+      {
+        fps:10,
+        qrbox:(w,h)=>({
+          width:Math.max(220,Math.min(Math.floor(w*0.90),360)),
+          height:Math.max(90,Math.min(Math.floor(h*0.34),150))
+        }),
+        aspectRatio:1.777778,
+        disableFlip:true
+      },
+      async(decodedText,decodedResult)=>{
+        if(isbnScanHandled)return;
+        const code=cleanIsbn(decodedText);
+        const formatName=decodedResult?.result?.format?.formatName||"";
+
+        if(!isBookBarcode(code)){
+          if(status)status.textContent=`Code détecté${formatName?` (${formatName})`:""}, mais ce n’est pas un ISBN-13 de livre.`;
+          return;
+        }
+
+        isbnScanHandled=true;
+        if(status)status.textContent=`ISBN détecté : ${code}`;
+        try{navigator.vibrate?.(100)}catch(_){}
+        await stopIsbnScanner();
+        const manual=document.getElementById("manualIsbn");
+        if(manual)manual.value=code;
+        await lookupIsbn(code,{source:"scanner"});
+      },
+      ()=>{}
+    );
+
+    if(status)status.textContent="Place le code-barres ISBN dans le cadre.";
+  }catch(e){
+    if(status)status.textContent="Caméra indisponible.";
+    await stopIsbnScanner();
+    alert(`${e.message||"Impossible d’ouvrir la caméra."}\n\nTu peux saisir l’ISBN manuellement juste en dessous.`);
+  }finally{
+    isbnScannerStarting=false;
+    hideBusy();
+  }
+}
+
+async function openLibrarySearchByIsbn(isbn){
+  const p=new URLSearchParams({
+    isbn:cleanIsbn(isbn),
+    limit:"10",
+    fields:openLibraryFields()
+  });
+  const d=await openLibraryJson(`${OPEN_LIBRARY_SEARCH_URL}?${p.toString()}`);
+  const out=[];
+  for(const doc of d.docs||[]){
+    const editions=doc?.editions?.docs||[];
+    if(editions.length){
+      for(const ed of editions.slice(0,10)){
+        const item=normalizeOpenLibraryEdition(ed,doc);
+        if(item)out.push(item);
+      }
+    }else{
+      const item=normalizeOpenLibraryEdition(null,doc);
+      if(item)out.push(item);
+    }
+  }
+  return out;
+}
+
+async function lookupCatalogByIsbn(isbn){
+  const wanted=cleanIsbn(isbn);
+
+  const [g,o]=await Promise.allSettled([
+    googleBooksRequest(`isbn:${wanted}`,20,0,""),
+    openLibrarySearchByIsbn(wanted)
+  ]);
+
+  const items=[];
+  if(g.status==="fulfilled")items.push(...g.value.items);
+  if(o.status==="fulfilled")items.push(...o.value);
+
+  let merged=mergeCatalogItems(items);
+  const exact=merged.filter(item=>cleanIsbn(catalogIsbn(item))===wanted);
+  if(exact.length)merged=exact;
+
+  merged.sort((a,b)=>{
+    const ac=Boolean(coverDataFromGoogleItem(a).cover||coverDataFromGoogleItem(a).fallback);
+    const bc=Boolean(coverDataFromGoogleItem(b).cover||coverDataFromGoogleItem(b).fallback);
+    return (bc-ac) || catalogRichness(b)-catalogRichness(a);
+  });
+
+  if(merged.length)return merged[0];
+
+  const errors=[];
+  if(g.status==="rejected")errors.push("Google Books : "+(g.reason?.message||"erreur"));
+  if(o.status==="rejected")errors.push("Open Library : "+(o.reason?.message||"erreur"));
+  if(errors.length===2)throw new Error(errors.join(" · "));
+  return null;
+}
+
+function renderIsbnCandidate(data,isbn){
+  const box=document.getElementById("results");
+  if(!box)return;
+
+  const exact=findExactIsbnDuplicate(data);
+  if(exact){
+    showDuplicateGuard(data,exact,"isbn");
+    return;
+  }
+
+  const same=findSameWorkDuplicate(data);
+  if(same){
+    showDuplicateGuard(data,same,"work");
+    return;
+  }
+
+  const cover=data.cover||data.coverFallback||"";
+  box.innerHTML=`<div class="isbn-confirm">
+    <div class="isbn-confirm-head">
+      ${cover?`<img src="${esc(cover)}" onerror="this.style.visibility='hidden'">`:""}
+      <div>
+        <div class="isbn-confirm-title">${esc(data.title||"Titre non trouvé")}</div>
+        <div class="isbn-confirm-meta">
+          ${esc(data.author||"Auteur non renseigné")}
+          ${data.publisher?`<br>${esc(data.publisher)}`:""}
+          ${data.publishedDate?` · ${esc(data.publishedDate)}`:""}
+          ${data.pages?` · ${esc(data.pages)} pages`:""}
+          <br>ISBN ${esc(cleanIsbn(data.isbn||isbn))}
+          ${data.catalogSources?` · ${esc(data.catalogSources)}`:""}
+        </div>
+      </div>
+    </div>
+    <button class="primary" onclick="chooseResult(window.__isbnCandidate)">Ajouter cette édition</button>
+  </div>`;
+  window.__isbnCandidate=data;
+}
+
+async function lookupIsbn(raw,{source="manual"}={}){
+  if(!await ensureEditMode())return;
+  const isbn=cleanIsbn(raw);
+  const box=document.getElementById("results");
+
+  if(!isbnValid(isbn)){
+    if(box)box.innerHTML='<div class="metadata-status warning">ISBN invalide. Vérifie les 10 ou 13 chiffres.</div>';
+    return;
+  }
+
+  if(box)box.innerHTML=`<div class="notice">Recherche exacte de l’ISBN ${esc(isbn)} dans Google Books et Open Library…</div>`;
+  showBusy(source==="scanner"?"ISBN détecté · recherche de l’édition…":"Recherche de l’ISBN…");
+
+  try{
+    const item=await lookupCatalogByIsbn(isbn);
+    if(!item){
+      box.innerHTML=`<div class="metadata-status warning">ISBN ${esc(isbn)} reconnu, mais aucune fiche d’édition n’a été trouvée dans Google Books ou Open Library. Tu peux utiliser la recherche par titre.</div>`;
+      return;
+    }
+    const data=catalogItemToBookData(item);
+    if(!data.isbn)data.isbn=isbn;
+    renderIsbnCandidate(data,isbn);
+  }catch(e){
+    box.innerHTML=`<div class="metadata-status error">${esc(e.message||"Recherche ISBN temporairement indisponible")}</div>`;
+  }finally{
+    hideBusy();
+  }
+}
+
+async function lookupManualIsbn(){
+  const input=document.getElementById("manualIsbn");
+  await lookupIsbn(input?.value||"",{source:"manual"});
+}
+
+async function openAdd(){
+  if(!await ensureEditMode())return;
+  pendingDuplicateCandidate=null;
+  window.__isbnCandidate=null;
+  document.getElementById("addModal").classList.add("open");
+  document.getElementById("bookQuery").focus();
+}
+async function closeAdd(){
+  await stopIsbnScanner();
+  pendingDuplicateCandidate=null;
+  window.__isbnCandidate=null;
+  document.getElementById("addModal").classList.remove("open");
+  document.getElementById("results").innerHTML="";
+  const manual=document.getElementById("manualIsbn");
+  if(manual)manual.value="";
+}
 
 async function searchBooks(){
   const q=document.getElementById("bookQuery").value.trim();
@@ -2045,8 +2503,22 @@ async function searchBooks(){
   }
 }
 
-async function chooseResult(data){
+async function chooseResult(data,options={}){
   if(!await ensureEditMode())return;
+
+  if(!options.forceDuplicate){
+    const exact=findExactIsbnDuplicate(data);
+    if(exact){
+      showDuplicateGuard(data,exact,"isbn");
+      return;
+    }
+
+    const same=findSameWorkDuplicate(data);
+    if(same){
+      showDuplicateGuard(data,same,"work");
+      return;
+    }
+  }
 
   const before=librarySnapshotText();
   const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
