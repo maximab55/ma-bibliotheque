@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f6f3ee">
-<title>Ma Bibliothèque · v18a</title>
+<title>Ma Bibliothèque · v18b</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -178,7 +178,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label">v18a</span>
+        <span class="version-label">v18b</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -276,7 +276,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V18a — ergonomie édition + suggestions tactiles
+// Ma Bibliothèque V18b — ajout du format livre audio
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -2654,7 +2654,7 @@ async function editBook(id){
     <div class="field"><label>Pourquoi je l’ai noté</label><textarea id="fWhy">${esc(b.why||"")}</textarea></div>
     <div class="field"><label>Mon avis</label><textarea id="fReview">${esc(b.review||"")}</textarea></div>
     <div class="row">
-      <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse","Livre audio"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field">
         <label>Propriétaire</label>
         <input id="fOwner" value="${esc(ownerValue(b))}" placeholder="À moi, Babeth…">
