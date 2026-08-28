@@ -2242,9 +2242,9 @@
     },
     {
       "id": "b1786448282716",
-      "status": "En cours",
+      "status": "Lu",
       "rating": 0,
-      "review": "",
+      "review": "Super histoire. Haletant. Drôle. C’était mon 1er roman de cet auteur.",
       "format": "",
       "owner": "À moi",
       "borrowedFrom": "",
@@ -2253,7 +2253,7 @@
       "source": "",
       "why": "",
       "started": "2026-07-08",
-      "finished": "",
+      "finished": "2026-08-26",
       "readingDays": "",
       "editionLocked": true,
       "editionSelection": "manual",
@@ -2279,7 +2279,10 @@
       "openLibraryEditionId": "OL8840794M",
       "openLibraryWorkId": "OL1749080W",
       "catalogSources": "Open Library",
-      "editionLanguage": "fr"
+      "editionLanguage": "fr",
+      "recommendedBy": "",
+      "recommendationCount": 0,
+      "purchaseNote": ""
     }
   ],
   "deletedIds": [
