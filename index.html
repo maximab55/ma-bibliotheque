@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20d</title>
+<title>Ma Bibliothèque · v20e</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -235,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20d">v20d</span>
+        <span class="version-label" onclick="adminTap()" title="v20e">v20e</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -354,7 +354,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20d — automatisations dates/statut/durée + format papier par défaut
+// Ma Bibliothèque V20e — début/fin de lecture et statuts automatisés
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -3460,6 +3460,15 @@ function syncReadingDays(){
 }
 
 function onReadingStartChanged(){
+  const started=document.getElementById("fStarted");
+  const finished=document.getElementById("fFinished");
+  const status=document.getElementById("fStatus");
+
+  if(started?.value && status && !finished?.value &&
+     (status.value==="À lire" || status.value==="À acheter")){
+    status.value="En cours";
+  }
+
   syncReadingDays();
 }
 
@@ -3474,12 +3483,18 @@ function onReadingFinishedChanged(){
 
 function onReadingStatusChanged(){
   const status=document.getElementById("fStatus");
+  const started=document.getElementById("fStarted");
   const finished=document.getElementById("fFinished");
-  if(!status||!finished)return;
+  if(!status||!started||!finished)return;
+
+  if(status.value==="En cours" && !started.value){
+    started.value=todayIsoLocal();
+  }
 
   if(status.value==="Lu" && !finished.value){
     finished.value=todayIsoLocal();
   }
+
   syncReadingDays();
 }
 
@@ -3986,11 +4001,21 @@ async function saveEdit(id){
   }
 
   // Final consistency pass before saving.
+  if(fStatus.value==="En cours" && !fStarted.value){
+    fStarted.value=todayIsoLocal();
+  }
+
   if(fFinished.value){
     fStatus.value="Lu";
   }else if(fStatus.value==="Lu"){
     fFinished.value=todayIsoLocal();
   }
+
+  if(fStarted.value && !fFinished.value &&
+     (fStatus.value==="À lire" || fStatus.value==="À acheter")){
+    fStatus.value="En cours";
+  }
+
   const autoReadingDays=readingDaysBetween(fStarted.value,fFinished.value);
   if(autoReadingDays!==""){
     fDays.value=autoReadingDays;
