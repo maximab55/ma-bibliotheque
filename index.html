@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20c</title>
+<title>Ma Bibliothèque · v20d</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -235,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20c">v20c</span>
+        <span class="version-label" onclick="adminTap()" title="v20d">v20d</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -354,7 +354,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20c — changement de couverture direct depuis la fiche
+// Ma Bibliothèque V20d — automatisations dates/statut/durée + format papier par défaut
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -2666,7 +2666,8 @@ async function chooseResult(data,options={}){
   }
 
   const before=librarySnapshotText();
-  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
+  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"Livre papier",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
+  if(!b.format)b.format="Livre papier";
   const box=document.getElementById("results");
 
   books.unshift(b);
@@ -2804,7 +2805,7 @@ function openBook(id,syncUrl=true){
         </div>
         <div class="reading-item">
           <div class="reading-label">Durée</div>
-          <div class="reading-value">${esc(b.readingDays?b.readingDays+" jour"+(Number(b.readingDays)>1?"s":""):"À compléter")}</div>
+          <div class="reading-value">${esc((b.readingDays!==""&&b.readingDays!==null&&b.readingDays!==undefined)?b.readingDays+" jour"+(Number(b.readingDays)>1?"s":""):"À compléter")}</div>
         </div>
         <div class="reading-item">
           <div class="reading-label">Format</div>
@@ -3431,6 +3432,57 @@ function closeEdit(){
   if(bookIdFromUrl())syncBookUrl("");
 }
 
+
+function todayIsoLocal(){
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function readingDaysBetween(startIso,endIso){
+  if(!startIso||!endIso)return "";
+  const start=new Date(`${startIso}T12:00:00`);
+  const end=new Date(`${endIso}T12:00:00`);
+  if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))return "";
+  const diff=Math.round((end-start)/86400000);
+  return diff>=0 ? diff : "";
+}
+
+function syncReadingDays(){
+  const start=document.getElementById("fStarted");
+  const end=document.getElementById("fFinished");
+  const days=document.getElementById("fDays");
+  if(!start||!end||!days)return;
+  const value=readingDaysBetween(start.value,end.value);
+  days.value=value;
+}
+
+function onReadingStartChanged(){
+  syncReadingDays();
+}
+
+function onReadingFinishedChanged(){
+  const finished=document.getElementById("fFinished");
+  const status=document.getElementById("fStatus");
+  if(finished?.value && status){
+    status.value="Lu";
+  }
+  syncReadingDays();
+}
+
+function onReadingStatusChanged(){
+  const status=document.getElementById("fStatus");
+  const finished=document.getElementById("fFinished");
+  if(!status||!finished)return;
+
+  if(status.value==="Lu" && !finished.value){
+    finished.value=todayIsoLocal();
+  }
+  syncReadingDays();
+}
+
 async function editBook(id){
   if(!await ensureEditMode())return;
   const b=books.find(x=>x.id===id); if(!b)return;
@@ -3439,7 +3491,7 @@ async function editBook(id){
     <div class="field"><label>Titre</label><input id="fTitle" value="${esc(b.title)}"></div>
     <div class="field"><label>Auteur</label><input id="fAuthor" value="${esc(b.author||"")}"></div>
     <div class="row">
-      <div class="field"><label>Statut</label><select id="fStatus">${["À acheter","À lire","En cours","Lu"].map(x=>`<option ${b.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Statut</label><select id="fStatus" onchange="onReadingStatusChanged()">${["À acheter","À lire","En cours","Lu"].map(x=>`<option ${b.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field"><label>Pages</label><input type="number" id="fPages" value="${esc(b.pages||"")}"></div>
     </div>
     <div class="row">
@@ -3476,7 +3528,7 @@ async function editBook(id){
     <div class="field"><label>Pourquoi je l’ai noté</label><textarea id="fWhy">${esc(b.why||"")}</textarea></div>
     <div class="field"><label>Mon avis</label><textarea id="fReview">${esc(b.review||"")}</textarea></div>
     <div class="row">
-      <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse","Livre audio"].map(x=>`<option ${b.format===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Lu en</label><select id="fFormat">${["","Livre papier","Tablette / liseuse","Livre audio"].map(x=>`<option ${(b.format||"Livre papier")===x?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field">
         <label>Propriétaire</label>
         <input id="fOwner" value="${esc(ownerValue(b))}" placeholder="À moi, Babeth…">
@@ -3491,10 +3543,10 @@ async function editBook(id){
     </div>
     <div class="field"><label>Note d’achat</label><input id="fPurchaseNote" value="${esc(b.purchaseNote||"")}" placeholder="Ex. Kindle, version anglaise…"></div>
     <div class="row">
-      <div class="field"><label>Commencé le</label><input type="date" id="fStarted" value="${esc(b.started||"")}"></div>
-      <div class="field"><label>Terminé le</label><input type="date" id="fFinished" value="${esc(b.finished||"")}"></div>
+      <div class="field"><label>Commencé le</label><input type="date" id="fStarted" value="${esc(b.started||"")}" onchange="onReadingStartChanged()"></div>
+      <div class="field"><label>Terminé le</label><input type="date" id="fFinished" value="${esc(b.finished||"")}" onchange="onReadingFinishedChanged()"></div>
     </div>
-    <div class="field"><label>Nombre de jours</label><input type="number" id="fDays" value="${esc(b.readingDays||"")}"></div>
+    <div class="field"><label>Nombre de jours</label><input type="number" id="fDays" value="${esc((b.readingDays!==""&&b.readingDays!==null&&b.readingDays!==undefined)?b.readingDays:readingDaysBetween(b.started,b.finished))}"></div>
     <div class="toolbar">
       <button class="primary" id="saveEditBtn" onclick="saveEdit('${b.id}')">Enregistrer</button>
       <button class="ghost" type="button" onclick="cancelEditBook('${b.id}')">Annuler</button>
@@ -3933,6 +3985,17 @@ async function saveEdit(id){
     }
   }
 
+  // Final consistency pass before saving.
+  if(fFinished.value){
+    fStatus.value="Lu";
+  }else if(fStatus.value==="Lu"){
+    fFinished.value=todayIsoLocal();
+  }
+  const autoReadingDays=readingDaysBetween(fStarted.value,fFinished.value);
+  if(autoReadingDays!==""){
+    fDays.value=autoReadingDays;
+  }
+
   const bibliographicChanged =
     fPublisher.value.trim()!==String(b.publisher||"") ||
     fYear.value.trim()!==String(b.year||"") ||
@@ -3950,7 +4013,7 @@ async function saveEdit(id){
     review:fReview.value.trim(),format:fFormat.value,owner:fOwner.value.trim(),borrowedFrom:"",
     recommendTo:fRecommend.value.trim(),loanedTo:fLoaned.value.trim(),
     purchaseNote:fPurchaseNote.value.trim(),
-    started:fStarted.value,finished:fFinished.value,readingDays:Number(fDays.value)||""
+    started:fStarted.value,finished:fFinished.value,readingDays:fDays.value===""?"":Number(fDays.value)
   });
   if(bibliographicChanged){
     b.editionLocked=true;
