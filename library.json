@@ -3,7 +3,7 @@
   "books": [
     {
       "id": "b1790538170560",
-      "status": "À lire",
+      "status": "En cours",
       "rating": 0,
       "review": "",
       "format": "Livre papier",
@@ -17,7 +17,7 @@
       "recommendedBy": "Laurène",
       "recommendationCount": 0,
       "why": "",
-      "started": "",
+      "started": "2026-09-28",
       "finished": "",
       "readingDays": "",
       "editionLocked": true,
