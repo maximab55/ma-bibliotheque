@@ -3,7 +3,7 @@
   "books": [
     {
       "id": "b1791120499830",
-      "status": "À lire",
+      "status": "À acheter",
       "rating": 0,
       "review": "",
       "format": "Livre papier",
@@ -16,7 +16,7 @@
       "source": "",
       "recommendedBy": "",
       "recommendationCount": 0,
-      "why": "",
+      "why": "Pour les enfants",
       "started": "",
       "finished": "",
       "readingDays": "",
@@ -26,7 +26,7 @@
       "title": "Croc-Blanc",
       "author": "Jack London",
       "publisher": "Flammarion Jeunesse",
-      "year": 2021,
+      "year": "2021",
       "publishedDate": "2021-04-07T00:00:00+02:00",
       "pages": 263,
       "category": "Juvenile Fiction",
