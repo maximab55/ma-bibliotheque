@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20e</title>
+<title>Ma Bibliothèque · v20f</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -235,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20e">v20e</span>
+        <span class="version-label" onclick="adminTap()" title="v20f">v20f</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -354,7 +354,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20e — début/fin de lecture et statuts automatisés
+// Ma Bibliothèque V20f — statut selon mode d’ajout + ordre d’entrée
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -1316,28 +1316,14 @@ function readingDateKey(b){
 }
 
 function smartCompare(a,b){
-  const order={"En cours":0,"Lu":1,"À lire":2,"À acheter":3};
-  const sa=order[a.status] ?? 9, sb=order[b.status] ?? 9;
-  if(sa!==sb) return sa-sb;
-  if(a.status==="Lu"){
-    return (b.finished||b.started||"").localeCompare(a.finished||a.started||"") ||
-      a.title.localeCompare(b.title,"fr");
-  }
-  if(a.status==="En cours"){
-    return (b.started||"").localeCompare(a.started||"") ||
-      a.title.localeCompare(b.title,"fr");
-  }
-  if(a.status==="À lire" || a.status==="À acheter"){
-    const recommendationDiff=(Number(b.recommendationCount)||0)-(Number(a.recommendationCount)||0);
-    if(recommendationDiff) return recommendationDiff;
+  // Tri par défaut : dernier livre ajouté en premier.
+  // Les tris explicites (chronologie, titre, auteur, note) restent inchangés.
+  const addedDiff=(b.addedAt||"").localeCompare(a.addedAt||"");
+  if(addedDiff)return addedDiff;
 
-    if(a.status==="À acheter"){
-      return (b.addedAt||"").localeCompare(a.addedAt||"") ||
-        a.title.localeCompare(b.title,"fr");
-    }
-    return a.title.localeCompare(b.title,"fr");
-  }
-  return a.title.localeCompare(b.title,"fr");
+  // Repli utile pour les anciennes fiches sans addedAt.
+  return (b.finished||b.started||"").localeCompare(a.finished||a.started||"") ||
+    a.title.localeCompare(b.title,"fr");
 }
 
 function sortBooks(list){
@@ -2555,7 +2541,7 @@ function renderIsbnCandidate(data,isbn){
     </div>
     <button class="primary" onclick="chooseResult(window.__isbnCandidate)">Ajouter cette édition</button>
   </div>`;
-  window.__isbnCandidate=data;
+  window.__isbnCandidate={...data,_addOrigin:"isbn"};
 }
 
 async function lookupIsbn(raw,{source="manual"}={}){
@@ -2635,7 +2621,8 @@ async function searchBooks(){
         openLibraryEditionId:item.openLibraryEditionId||(item.source==="openlibrary"?item.id:""),
         openLibraryWorkId:item.openLibraryWorkId||"",catalogSources:sources,
         editionLanguage:v.language||"",
-        metadataCheckedAt:new Date().toISOString(),metadataError:""
+        metadataCheckedAt:new Date().toISOString(),metadataError:"",
+        _addOrigin:"search"
       }).replace(/'/g,"&#39;")})'>
         ${img?`<img src="${esc(img)}" data-fallback="${esc(cd.fallback||"")}" onerror="handleCoverError(this)">`:`<div style="width:48px;height:72px;background:#ddd;border-radius:5px"></div>`}
         <div><strong>${esc(v.title||"Sans titre")}</strong><small>${esc((v.authors||[]).join(", "))}<br>${esc(v.publisher||"")}${v.publishedDate?" · "+esc(v.publishedDate):""}${v.pageCount?" · "+v.pageCount+" p.":""}<br><span style="font-size:10px">${esc(sources)}</span></small></div>
@@ -2651,23 +2638,29 @@ async function searchBooks(){
 async function chooseResult(data,options={}){
   if(!await ensureEditMode())return;
 
+  const addOrigin=options.origin||data?._addOrigin||"search";
+  const cleanData={...data};
+  delete cleanData._addOrigin;
+
   if(!options.forceDuplicate){
-    const exact=findExactIsbnDuplicate(data);
+    const exact=findExactIsbnDuplicate(cleanData);
     if(exact){
-      showDuplicateGuard(data,exact,"isbn");
+      showDuplicateGuard({...cleanData,_addOrigin:addOrigin},exact,"isbn");
       return;
     }
 
-    const same=findSameWorkDuplicate(data);
+    const same=findSameWorkDuplicate(cleanData);
     if(same){
-      showDuplicateGuard(data,same,"work");
+      showDuplicateGuard({...cleanData,_addOrigin:addOrigin},same,"work");
       return;
     }
   }
 
   const before=librarySnapshotText();
-  const b={id:"b"+Date.now(),status:"À lire",rating:0,review:"",format:"Livre papier",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...data};
+  const defaultStatus=addOrigin==="isbn" ? "À lire" : "À acheter";
+  const b={id:"b"+Date.now(),status:defaultStatus,rating:0,review:"",format:"Livre papier",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...cleanData};
   if(!b.format)b.format="Livre papier";
+  if(!b.status)b.status=defaultStatus;
   const box=document.getElementById("results");
 
   books.unshift(b);
