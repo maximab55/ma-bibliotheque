@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20f</title>
+<title>Ma Bibliothèque · v20g</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -235,7 +235,7 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20f">v20f</span>
+        <span class="version-label" onclick="adminTap()" title="v20g">v20g</span>
       </div>
       <div class="sub">Ma bibliothèque personnelle.</div>
     </div>
@@ -354,7 +354,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20f — statut selon mode d’ajout + ordre d’entrée
+// Ma Bibliothèque V20g — tri par défaut par statut puis récence
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -1316,13 +1316,31 @@ function readingDateKey(b){
 }
 
 function smartCompare(a,b){
-  // Tri par défaut : dernier livre ajouté en premier.
-  // Les tris explicites (chronologie, titre, auteur, note) restent inchangés.
-  const addedDiff=(b.addedAt||"").localeCompare(a.addedAt||"");
-  if(addedDiff)return addedDiff;
+  // Tri par défaut :
+  // En cours -> Lus -> À lire -> À acheter.
+  // À l'intérieur de chaque statut : les plus récents d'abord.
+  const order={"En cours":0,"Lu":1,"À lire":2,"À acheter":3};
+  const sa=order[a.status] ?? 9;
+  const sb=order[b.status] ?? 9;
 
-  // Repli utile pour les anciennes fiches sans addedAt.
-  return (b.finished||b.started||"").localeCompare(a.finished||a.started||"") ||
+  if(sa!==sb)return sa-sb;
+
+  if(a.status==="En cours"){
+    return (b.started||b.addedAt||"").localeCompare(a.started||a.addedAt||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+
+  if(a.status==="Lu"){
+    return (b.finished||b.started||b.addedAt||"").localeCompare(a.finished||a.started||a.addedAt||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+
+  if(a.status==="À lire" || a.status==="À acheter"){
+    return (b.addedAt||"").localeCompare(a.addedAt||"") ||
+      a.title.localeCompare(b.title,"fr");
+  }
+
+  return (b.addedAt||"").localeCompare(a.addedAt||"") ||
     a.title.localeCompare(b.title,"fr");
 }
 
