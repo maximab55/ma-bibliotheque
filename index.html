@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v20g</title>
+<title>Ma Bibliothèque · v21a</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -32,6 +32,11 @@
   .ghost{background:var(--chip);color:var(--ink)}
   .search{display:flex;gap:8px;margin:18px 0 12px}
   .search input{flex:1;border:1px solid var(--line);background:white;padding:14px 15px;border-radius:15px;outline:none}
+  .profile-strip{display:flex;gap:7px;overflow:auto;padding:2px 0 13px;scrollbar-width:none}
+  .profile-strip::-webkit-scrollbar{display:none}
+  .profile-chip{border:1px solid var(--line);background:white;color:var(--ink);padding:8px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;flex:0 0 auto}
+  .profile-chip.active{background:var(--ink);color:white;border-color:var(--ink)}
+  .profile-chip.add-profile{border-style:dashed;color:var(--muted);background:transparent}
   .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:4px}
   .tab{white-space:nowrap;border:0;background:var(--chip);padding:9px 13px;border-radius:999px}
   .tab.active{background:var(--ink);color:white}
@@ -70,6 +75,7 @@
   .placeholder{padding:14px;text-align:center;font-weight:700;font-family:Georgia,serif}
   .title{font-size:14px;font-weight:700;margin-top:9px;line-height:1.2}
   .author{font-size:12px;color:var(--muted);margin-top:3px}
+  .card-stars{font-size:13px;letter-spacing:1px;margin-top:5px;line-height:1;color:var(--ink)}
   .badge{display:inline-block;font-size:11px;padding:5px 8px;border-radius:999px;background:var(--green);margin-top:6px}
   .empty{border:1px dashed #cfc6bb;border-radius:18px;padding:26px;text-align:center;color:var(--muted)}
   .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(246,243,238,.94);backdrop-filter:blur(15px);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));display:none;justify-content:center;z-index:20}
@@ -235,12 +241,14 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v20g">v20g</span>
+        <span class="version-label" onclick="adminTap()" title="v21a">v21a</span>
       </div>
-      <div class="sub">Ma bibliothèque personnelle.</div>
+      <div class="sub" id="profileSubtitle">Bibliothèque de Maxime.</div>
     </div>
     <button class="primary" id="editOnlyAdd" style="display:none" onclick="openAdd()">＋ Ajouter</button>
   </header>
+
+  <div class="profile-strip" id="profileStrip" aria-label="Profils de lecture"></div>
 
   <div class="search">
     <input id="librarySearch" placeholder="Rechercher un titre ou un auteur…" oninput="render()">
@@ -284,7 +292,7 @@
 <div class="modal" id="addModal">
   <div class="sheet">
     <div class="grab"></div>
-    <h2>Ajouter un livre</h2>
+    <h2 id="addModalTitle">Ajouter un livre</h2>
     <div class="field">
       <label>Titre ou auteur</label>
       <input id="bookQuery" placeholder="Ex. Le joueur d'échecs Zweig">
@@ -354,7 +362,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V20g — tri par défaut par statut puis récence
+// Ma Bibliothèque V21a — profil Laurène + notes en étoiles
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -844,12 +852,153 @@ const GITHUB_API="https://api.github.com";
 const PUBLIC_LIBRARY_URL="./library.json";
 const GITHUB_LIBRARY_API=`${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_LIBRARY_PATH}?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
 
+const DEFAULT_READER_PROFILES=[
+  {id:"maxime",name:"Maxime"},
+  {id:"joseph",name:"Joseph"},
+  {id:"golda",name:"Golda"},
+  {id:"laurene",name:"Laurène"}
+];
+const ACTIVE_PROFILE_KEY="mybooks-active-profile-v1";
+
+let readerProfiles=DEFAULT_READER_PROFILES.map(p=>({...p}));
+let activeProfileId=localStorage.getItem(ACTIVE_PROFILE_KEY)||"maxime";
+
+function profileSlug(name=""){
+  const base=String(name)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"") || "profil";
+  let id=base, n=2;
+  while(readerProfiles.some(p=>p.id===id))id=`${base}-${n++}`;
+  return id;
+}
+
+function normalizeProfileArchitecture(profileList=null){
+  if(Array.isArray(profileList) && profileList.length){
+    readerProfiles=profileList
+      .filter(p=>p && p.id && p.name)
+      .map(p=>{
+        const id=String(p.id);
+        const name=String(p.name);
+        if(id==="lorraine" || name.trim().toLowerCase()==="lorraine"){
+          return {id:"laurene",name:"Laurène"};
+        }
+        return {id,name};
+      });
+  }else{
+    readerProfiles=DEFAULT_READER_PROFILES.map(p=>({...p}));
+  }
+
+  // Évite un doublon si Laurène et l'ancien profil Lorraine coexistent.
+  readerProfiles=[...new Map(readerProfiles.map(p=>[p.id,p])).values()];
+
+  if(!readerProfiles.some(p=>p.id==="maxime")){
+    readerProfiles.unshift({id:"maxime",name:"Maxime"});
+  }
+
+  if(activeProfileId==="lorraine"){
+    activeProfileId="laurene";
+    localStorage.setItem(ACTIVE_PROFILE_KEY,activeProfileId);
+  }
+
+  if(!readerProfiles.some(p=>p.id===activeProfileId)){
+    activeProfileId="maxime";
+    localStorage.setItem(ACTIVE_PROFILE_KEY,activeProfileId);
+  }
+
+  // Migration V21 : toute fiche historique appartient à Maxime.
+  // Migration V21a : l'ancien profil Lorraine devient Laurène.
+  books=books.map(b=>({
+    ...b,
+    profileId:b.profileId==="lorraine" ? "laurene" : (b.profileId||"maxime")
+  }));
+}
+
+function activeProfile(){
+  return readerProfiles.find(p=>p.id===activeProfileId) ||
+    readerProfiles[0] || {id:"maxime",name:"Maxime"};
+}
+
+function updateProfileChrome(){
+  const p=activeProfile();
+  const subtitle=document.getElementById("profileSubtitle");
+  if(subtitle)subtitle.textContent=`Bibliothèque de ${p.name}.`;
+
+  const addTitle=document.getElementById("addModalTitle");
+  if(addTitle)addTitle.textContent=`Ajouter un livre · ${p.name}`;
+
+  const strip=document.getElementById("profileStrip");
+  if(!strip)return;
+
+  strip.innerHTML=readerProfiles.map(profile=>`
+    <button type="button"
+      class="profile-chip ${profile.id===activeProfileId?"active":""}"
+      onclick="switchReaderProfile('${profile.id}')">${esc(profile.name)}</button>
+  `).join("") + `
+    <button type="button" class="profile-chip add-profile" onclick="addReaderProfile()">＋ Profil</button>`;
+}
+
+function resetStatusTabs(){
+  activeStatus="Tous";
+  document.querySelectorAll(".tab").forEach(btn=>{
+    btn.classList.toggle("active",btn.dataset.status==="Tous");
+  });
+}
+
+function switchReaderProfile(profileId){
+  if(!readerProfiles.some(p=>p.id===profileId))return;
+
+  activeProfileId=profileId;
+  localStorage.setItem(ACTIVE_PROFILE_KEY,activeProfileId);
+  resetStatusTabs();
+
+  const search=document.getElementById("librarySearch");
+  if(search)search.value="";
+
+  document.getElementById("editModal")?.classList.remove("open");
+
+  if(location.hash.startsWith("#book=")){
+    history.replaceState(null,"",location.pathname+location.search);
+  }
+
+  updateProfileChrome();
+  render();
+}
+
+async function addReaderProfile(){
+  if(!await ensureEditMode())return;
+
+  const raw=window.prompt("Nom du nouveau profil :");
+  const name=String(raw||"").trim();
+  if(!name)return;
+
+  if(readerProfiles.some(p=>p.name.toLowerCase()===name.toLowerCase())){
+    alert("Ce profil existe déjà.");
+    return;
+  }
+
+  const before=librarySnapshotText();
+  const profile={id:profileSlug(name),name};
+  readerProfiles.push(profile);
+
+  try{
+    await persistCurrentLibraryOrThrow("Ajout du profil");
+    switchReaderProfile(profile.id);
+  }catch(e){
+    restoreLibrarySnapshot(before);
+  }
+}
+
 const cachedCloud=(()=>{
   try{return JSON.parse(localStorage.getItem(CLOUD_CACHE_KEY)||"null")}catch(_){return null}
 })();
 if(cachedCloud && Array.isArray(cachedCloud.books)){
   books=cachedCloud.books;
   deletedIds=new Set(Array.isArray(cachedCloud.deletedIds)?cachedCloud.deletedIds:[]);
+  normalizeProfileArchitecture(cachedCloud.profiles);
+}else{
+  normalizeProfileArchitecture();
 }
 
 let activeStatus = "Tous";
@@ -884,7 +1033,12 @@ function hideBusy(){
 }
 
 function cloudBackup(){
-  return {version:2,books,deletedIds:[...deletedIds]};
+  return {
+    version:3,
+    profiles:readerProfiles,
+    books,
+    deletedIds:[...deletedIds]
+  };
 }
 
 function saveLocalCache(){
@@ -964,6 +1118,8 @@ function updateEditUI(){
   if(install){
     install.style.display=(ownerChrome && !isStandaloneApp())?"":"none";
   }
+
+  updateProfileChrome();
 }
 
 function bytesToBase64(bytes){
@@ -1061,7 +1217,9 @@ function restoreLibrarySnapshot(snapshotText){
   const data=JSON.parse(snapshotText);
   books=Array.isArray(data.books)?data.books:[];
   deletedIds=new Set(Array.isArray(data.deletedIds)?data.deletedIds:[]);
+  normalizeProfileArchitecture(data.profiles);
   saveLocalCache();
+  updateProfileChrome();
   render();
 }
 
@@ -1176,8 +1334,10 @@ async function loadCentralLibrary(){
 
     books=data.books;
     deletedIds=new Set(Array.isArray(data.deletedIds)?data.deletedIds:[]);
+    normalizeProfileArchitecture(data.profiles);
     cloudReady=true;
     saveLocalCache();
+    updateProfileChrome();
     render();
     openBookFromUrl();
     setCloudStatus("Bibliothèque en ligne · mode lecture","ok");
@@ -1485,8 +1645,13 @@ function isPubliclyLoaned(b){
 }
 
 function render(){
+  updateProfileChrome();
   const q=document.getElementById("librarySearch").value.trim().toLowerCase();
-  let list=books.filter(b=>(activeStatus==="Tous" || b.status===activeStatus) && (!q || (b.title+" "+b.author).toLowerCase().includes(q)));
+  let list=books.filter(b=>
+    (b.profileId||"maxime")===activeProfileId &&
+    (activeStatus==="Tous" || b.status===activeStatus) &&
+    (!q || (b.title+" "+b.author).toLowerCase().includes(q))
+  );
   list=sortBooks(list);
   document.getElementById("sectionTitle").textContent=activeStatus==="Tous"?"Tous les livres":activeStatus;
   document.getElementById("count").textContent=list.length+" livre"+(list.length>1?"s":"");
@@ -1497,6 +1662,7 @@ function render(){
       <div class="cover">${coverImgHtml(b,true)}</div>
       <div class="title">${esc(b.title)}</div>
       <div class="author">${esc(b.author||"Auteur inconnu")}</div>
+      ${b.rating?`<div class="card-stars" aria-label="${Number(b.rating)} étoiles sur 5">${"★".repeat(Number(b.rating))}${"☆".repeat(5-Number(b.rating))}</div>`:""}
       <span class="badge">${esc(b.status)}</span>
     </div>`).join("");
 }
@@ -1570,6 +1736,7 @@ window.addEventListener("hashchange",()=>{
 });
 
 document.getElementById("sortSelect").value=sortMode;
+updateProfileChrome();
 updateEditUI();
 render();
 openBookFromUrl();
@@ -2172,11 +2339,17 @@ function sameBookTitleAuthor(book,data){
 function findExactIsbnDuplicate(data){
   const isbn=normalizeBookIsbn(data?.isbn||"");
   if(!isbn)return null;
-  return books.find(b=>normalizeBookIsbn(b.isbn||"")===isbn)||null;
+  return books.find(b=>
+    (b.profileId||"maxime")===activeProfileId &&
+    normalizeBookIsbn(b.isbn||"")===isbn
+  )||null;
 }
 
 function findSameWorkDuplicate(data){
-  return books.find(b=>sameBookTitleAuthor(b,data))||null;
+  return books.find(b=>
+    (b.profileId||"maxime")===activeProfileId &&
+    sameBookTitleAuthor(b,data)
+  )||null;
 }
 
 function duplicateBookHtml(book){
@@ -2600,6 +2773,7 @@ async function openAdd(){
   if(!await ensureEditMode())return;
   pendingDuplicateCandidate=null;
   window.__isbnCandidate=null;
+  updateProfileChrome();
   document.getElementById("addModal").classList.add("open");
   document.getElementById("bookQuery").focus();
 }
@@ -2676,7 +2850,7 @@ async function chooseResult(data,options={}){
 
   const before=librarySnapshotText();
   const defaultStatus=addOrigin==="isbn" ? "À lire" : "À acheter";
-  const b={id:"b"+Date.now(),status:defaultStatus,rating:0,review:"",format:"Livre papier",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...cleanData};
+  const b={id:"b"+Date.now(),profileId:activeProfileId,status:defaultStatus,rating:0,review:"",format:"Livre papier",owner:"À moi",borrowedFrom:"",loanedTo:"",recommendTo:"",purchaseNote:"",addedAt:new Date().toISOString(),source:"",recommendedBy:"",recommendationCount:0,why:"",started:"",finished:"",readingDays:"",editionLocked:true,editionSelection:"manual",editionVersion:"v10",...cleanData};
   if(!b.format)b.format="Livre papier";
   if(!b.status)b.status=defaultStatus;
   const box=document.getElementById("results");
@@ -2728,7 +2902,7 @@ function syncBookUrl(id){
 function openBookFromUrl(){
   const id=bookIdFromUrl();
   if(!id)return false;
-  const exists=books.some(b=>b.id===id);
+  const exists=books.some(b=>b.id===id && (b.profileId||"maxime")===activeProfileId);
   if(!exists)return false;
   openBook(id,false);
   return true;
@@ -2772,7 +2946,7 @@ function toggleSummary(id,button){
 }
 
 function openBook(id,syncUrl=true){
-  const b=books.find(x=>x.id===id); if(!b)return;
+  const b=books.find(x=>x.id===id && (x.profileId||"maxime")===activeProfileId); if(!b)return;
   if(syncUrl)syncBookUrl(id);
   document.getElementById("editContent").innerHTML=`
     <div class="detail-top">
@@ -3545,7 +3719,7 @@ async function editBook(id){
       <div class="field"><label>Source</label><select id="fSource">
         ${["","GDIY","Podcast","Article","Instagram","Ami","Autre"].map(x=>`<option ${b.source===x?"selected":""}>${x}</option>`).join("")}
       </select></div>
-      <div class="field"><label>Note / 5</label><select id="fRating">${[0,1,2,3,4,5].map(x=>`<option value="${x}" ${Number(b.rating||0)===x?"selected":""}>${x||"—"}</option>`).join("")}</select></div>
+      <div class="field"><label>Note</label><select id="fRating">${[0,1,2,3,4,5].map(x=>`<option value="${x}" ${Number(b.rating||0)===x?"selected":""}>${x?("★".repeat(x)+"☆".repeat(5-x)):"—"}</option>`).join("")}</select></div>
     </div>
     <div class="row">
       <div class="field"><label>Recommandé par</label><input id="fRecommendedBy" value="${esc(b.recommendedBy||"")}" placeholder="Ex. Lisa Azuelos"></div>
@@ -4120,11 +4294,7 @@ async function confirmDeleteBook(){
 function stripHtml(s){ const d=document.createElement("div"); d.innerHTML=s||""; return d.textContent||""; }
 
 function exportData(){
-  const backup={
-    version:2,
-    books,
-    deletedIds:[...deletedIds]
-  };
+  const backup=cloudBackup();
   const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="ma-bibliotheque.json"; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
@@ -4142,13 +4312,16 @@ async function importData(e){
     if(Array.isArray(d)){
       books=d;
       deletedIds=new Set();
+      normalizeProfileArchitecture();
     }else if(d && Array.isArray(d.books)){
       books=d.books;
       deletedIds=new Set(Array.isArray(d.deletedIds)?d.deletedIds:[]);
+      normalizeProfileArchitecture(d.profiles);
     }else{
       throw new Error("Format de sauvegarde invalide.");
     }
 
+    updateProfileChrome();
     render();
     setCloudStatus("Import de la bibliothèque…");
     await persistCurrentLibraryOrThrow("Import de la bibliothèque");
