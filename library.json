@@ -1,6 +1,70 @@
 {
-  "version": 2,
+  "version": 3,
+  "profiles": [
+    {
+      "id": "maxime",
+      "name": "Maxime"
+    },
+    {
+      "id": "joseph",
+      "name": "Joseph"
+    },
+    {
+      "id": "golda",
+      "name": "Golda"
+    },
+    {
+      "id": "laurene",
+      "name": "Laurène"
+    }
+  ],
   "books": [
+    {
+      "id": "b1791826547382",
+      "profileId": "golda",
+      "status": "À lire",
+      "rating": 0,
+      "review": "",
+      "format": "Livre papier",
+      "owner": "À moi",
+      "borrowedFrom": "",
+      "loanedTo": "",
+      "recommendTo": "",
+      "purchaseNote": "",
+      "addedAt": "2026-10-12T17:35:47.382Z",
+      "source": "",
+      "recommendedBy": "",
+      "recommendationCount": 0,
+      "why": "",
+      "started": "",
+      "finished": "",
+      "readingDays": "",
+      "editionLocked": true,
+      "editionSelection": "manual",
+      "editionVersion": "v10",
+      "title": "Sami et Julie CP Niveau 1 La dispute",
+      "author": "Emmanuelle Massonaud, Thérèse Bonté",
+      "publisher": "HACHETTE EDUC",
+      "year": 2017,
+      "publishedDate": [
+        "Jun 28, 2017"
+      ],
+      "pages": 32,
+      "category": "",
+      "description": "",
+      "cover": "https://covers.openlibrary.org/b/id/13244402-L.jpg?default=false",
+      "coverFallback": "",
+      "coverQuality": "large",
+      "coverQualityVersion": "v10",
+      "isbn": "9782012904002",
+      "googleBooksId": "",
+      "openLibraryEditionId": "OL46537214M",
+      "openLibraryWorkId": "OL34317369W",
+      "catalogSources": "Open Library",
+      "editionLanguage": "",
+      "metadataCheckedAt": "2026-10-12T17:35:39.484Z",
+      "metadataError": ""
+    },
     {
       "id": "b1791786671226",
       "status": "À acheter",
@@ -42,7 +106,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-10-12T06:30:57.019Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1791786585381",
@@ -85,7 +150,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-10-12T06:29:33.783Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1791149755572",
@@ -128,7 +194,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-10-04T21:37:11.696Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1791120499830",
@@ -171,7 +238,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-10-04T13:27:58.606Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1790538170560",
@@ -214,7 +282,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-09-27T19:42:36.119Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1788555725642",
@@ -257,7 +326,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-09-04T22:08:23.521Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1788342377593",
@@ -300,7 +370,8 @@
       "catalogSources": "Google Books",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-09-02T09:46:05.420Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1787296507699",
@@ -343,7 +414,8 @@
       "catalogSources": "Open Library",
       "editionLanguage": "fr",
       "metadataCheckedAt": "2026-10-04T21:43:38.423Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1786748845883",
@@ -386,7 +458,8 @@
       "catalogSources": "Open Library",
       "metadataCheckedAt": "2026-08-14T23:40:11.110Z",
       "metadataError": "",
-      "editionLanguage": "fr"
+      "editionLanguage": "fr",
+      "profileId": "maxime"
     },
     {
       "id": "b1786530477327",
@@ -428,7 +501,8 @@
       "openLibraryWorkId": "",
       "catalogSources": "Google Books",
       "metadataCheckedAt": "2026-08-12T10:27:25.344Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "seed1",
@@ -472,7 +546,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed2",
@@ -516,7 +591,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed3",
@@ -560,7 +636,8 @@
       "autoEnrich": true,
       "addedAt": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed4",
@@ -604,7 +681,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed5",
@@ -648,7 +726,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed6",
@@ -692,7 +771,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed7",
@@ -736,7 +816,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed8",
@@ -780,7 +861,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed9",
@@ -824,7 +906,8 @@
       "autoEnrich": true,
       "addedAt": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed10",
@@ -868,7 +951,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed11",
@@ -912,7 +996,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed12",
@@ -956,7 +1041,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed13",
@@ -1000,7 +1086,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed14",
@@ -1044,7 +1131,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed15",
@@ -1088,7 +1176,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "seed16",
@@ -1132,7 +1221,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy1",
@@ -1176,7 +1266,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:09:56.485Z"
+      "metadataCheckedAt": "2026-08-11T18:09:56.485Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy2",
@@ -1220,7 +1311,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:11:24.997Z"
+      "metadataCheckedAt": "2026-08-11T18:11:24.997Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy3",
@@ -1264,7 +1356,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:07:23.653Z"
+      "metadataCheckedAt": "2026-08-11T18:07:23.653Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy4",
@@ -1308,7 +1401,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy5",
@@ -1352,7 +1446,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T19:26:53.005Z"
+      "metadataCheckedAt": "2026-08-11T19:26:53.005Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy6",
@@ -1396,7 +1491,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:06:55.174Z"
+      "metadataCheckedAt": "2026-08-11T18:06:55.174Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy7",
@@ -1440,7 +1536,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:31:30.449Z"
+      "metadataCheckedAt": "2026-08-11T15:31:30.449Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy8",
@@ -1484,7 +1581,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy9",
@@ -1528,7 +1626,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:31:35.365Z"
+      "metadataCheckedAt": "2026-08-11T15:31:35.365Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy10",
@@ -1572,7 +1671,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy11",
@@ -1616,7 +1716,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy12",
@@ -1660,7 +1761,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy13",
@@ -1704,7 +1806,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:05:58.619Z"
+      "metadataCheckedAt": "2026-08-11T18:05:58.619Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy14",
@@ -1748,7 +1851,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:31:46.115Z"
+      "metadataCheckedAt": "2026-08-11T15:31:46.115Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy15",
@@ -1792,7 +1896,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:31:48.904Z"
+      "metadataCheckedAt": "2026-08-11T15:31:48.904Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy16",
@@ -1838,7 +1943,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy17",
@@ -1882,7 +1988,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:06:28.275Z"
+      "metadataCheckedAt": "2026-08-11T18:06:28.275Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy18",
@@ -1926,7 +2033,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy19",
@@ -1970,7 +2078,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T19:31:01.550Z"
+      "metadataCheckedAt": "2026-08-11T19:31:01.550Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy20",
@@ -2014,7 +2123,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy21",
@@ -2058,7 +2168,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy22",
@@ -2102,7 +2213,8 @@
       "editionSelection": "manual",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T19:27:18.963Z"
+      "metadataCheckedAt": "2026-08-11T19:27:18.963Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy23",
@@ -2146,7 +2258,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:38:54.147Z"
+      "metadataCheckedAt": "2026-08-11T15:38:54.147Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy24",
@@ -2190,7 +2303,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy25",
@@ -2234,7 +2348,8 @@
       "recommendedBy": "",
       "recommendationCount": 0,
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T18:12:46.004Z"
+      "metadataCheckedAt": "2026-08-11T18:12:46.004Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy26",
@@ -2278,7 +2393,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "buy27",
@@ -2322,7 +2438,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:39:02.549Z"
+      "metadataCheckedAt": "2026-08-11T15:39:02.549Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy28",
@@ -2366,7 +2483,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:39:06.859Z"
+      "metadataCheckedAt": "2026-08-11T15:39:06.859Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy29",
@@ -2410,7 +2528,8 @@
       "editionSelection": "auto",
       "editionVersion": "v10",
       "metadataError": "",
-      "metadataCheckedAt": "2026-08-11T15:39:08.899Z"
+      "metadataCheckedAt": "2026-08-11T15:39:08.899Z",
+      "profileId": "maxime"
     },
     {
       "id": "buy30",
@@ -2454,7 +2573,8 @@
       "source": "",
       "why": "",
       "recommendedBy": "",
-      "recommendationCount": 0
+      "recommendationCount": 0,
+      "profileId": "maxime"
     },
     {
       "id": "b1786485813841",
@@ -2497,7 +2617,8 @@
       "catalogSources": "Google Books + Open Library",
       "metadataCheckedAt": "2026-08-11T22:04:35.594Z",
       "metadataError": "",
-      "editionLanguage": "en"
+      "editionLanguage": "en",
+      "profileId": "maxime"
     },
     {
       "id": "b1786463772580",
@@ -2537,7 +2658,8 @@
       "openLibraryWorkId": "",
       "catalogSources": "Google Books",
       "metadataCheckedAt": "2026-08-11T15:55:55.273Z",
-      "metadataError": ""
+      "metadataError": "",
+      "profileId": "maxime"
     },
     {
       "id": "b1786448282716",
@@ -2581,7 +2703,8 @@
       "editionLanguage": "fr",
       "recommendedBy": "",
       "recommendationCount": 0,
-      "purchaseNote": ""
+      "purchaseNote": "",
+      "profileId": "maxime"
     }
   ],
   "deletedIds": [
