@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./app-icon-192.png">
-<title>Ma Bibliothèque · v21a</title>
+<title>Ma Bibliothèque · v22</title>
 <style>
   :root{
     --bg:#f6f3ee; --card:#fffdf9; --ink:#1d1d1f; --muted:#76716a; --line:#e8e1d8;
@@ -30,6 +30,8 @@
   .iconbtn,.primary,.ghost{border:0;border-radius:14px;padding:11px 14px;cursor:pointer}
   .primary{background:var(--accent);color:white;font-weight:650}
   .ghost{background:var(--chip);color:var(--ink)}
+  .header-actions{display:flex;gap:7px;align-items:center;flex:0 0 auto}
+  .analysis-open-btn{font-weight:650}
   .search{display:flex;gap:8px;margin:18px 0 12px}
   .search input{flex:1;border:1px solid var(--line);background:white;padding:14px 15px;border-radius:15px;outline:none}
   .profile-strip{display:flex;gap:7px;overflow:auto;padding:2px 0 13px;scrollbar-width:none}
@@ -224,6 +226,60 @@
   .web-cover-selected img{width:42px;height:63px;object-fit:cover;border-radius:5px}
   .web-cover-selected-text{font-size:11px;color:#415342;line-height:1.35}
   @media(max-width:420px){.web-cover-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+  .analysis-sheet{max-width:860px;max-height:96vh}
+  .analysis-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .analysis-head h2{margin:0}
+  .analysis-head p{margin:4px 0 0;color:var(--muted);font-size:12px}
+  .analysis-close{flex:0 0 auto}
+  .kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  @media(min-width:650px){.kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .kpi-card{border:1px solid var(--line);background:white;border-radius:15px;padding:12px}
+  .kpi-value{font-size:25px;line-height:1;font-weight:800}
+  .kpi-label{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.25}
+  .analysis-section{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .analysis-section h3{margin:0 0 5px;font-size:16px}
+  .analysis-help{font-size:11px;color:var(--muted);line-height:1.4;margin:0 0 11px}
+  .taste-summary{font-size:14px;line-height:1.5;margin:0 0 12px}
+  .taste-grid{display:grid;grid-template-columns:1fr;gap:9px}
+  @media(min-width:650px){.taste-grid{grid-template-columns:1fr 1fr}}
+  .taste-card{border:1px solid var(--line);border-radius:14px;background:white;padding:11px}
+  .taste-card-title{font-size:11px;color:var(--muted);margin-bottom:7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+  .taste-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12px;border-bottom:1px solid #f0ebe5}
+  .taste-row:last-child{border-bottom:0}
+  .taste-name{font-weight:650;min-width:0}
+  .taste-meta{color:var(--muted);white-space:nowrap}
+  .month-chart{display:grid;grid-template-columns:repeat(12,minmax(18px,1fr));gap:5px;align-items:end;height:125px;margin-top:10px}
+  .month-col{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
+  .month-value{font-size:9px;color:var(--muted);height:14px}
+  .month-bar-wrap{height:82px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+  .month-bar{width:70%;max-width:22px;background:var(--ink);border-radius:5px 5px 2px 2px;min-height:2px}
+  .month-label{font-size:8px;color:var(--muted);margin-top:5px;white-space:nowrap}
+  .pace-list{display:grid;gap:7px}
+  .pace-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;background:white;padding:9px 10px}
+  .pace-title{font-size:12px;font-weight:700;line-height:1.25}
+  .pace-sub{font-size:10px;color:var(--muted);margin-top:3px}
+  .pace-rate{font-size:13px;font-weight:800;white-space:nowrap}
+  .chooser-box{border:1px solid var(--line);border-radius:16px;background:#f3efe9;padding:12px}
+  .reference-chips{display:flex;gap:7px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+  .reference-chips::-webkit-scrollbar{display:none}
+  .reference-chip{border:1px solid var(--line);background:white;color:var(--ink);border-radius:12px;padding:8px 9px;text-align:left;min-width:145px;max-width:180px;flex:0 0 auto}
+  .reference-chip.active{background:var(--ink);color:white;border-color:var(--ink)}
+  .reference-title{font-size:11px;font-weight:750;line-height:1.25}
+  .reference-stars{font-size:10px;letter-spacing:.5px;margin-top:4px}
+  .analysis-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+  .analysis-controls select{width:100%;border:1px solid var(--line);background:white;border-radius:11px;padding:10px;font-size:12px}
+  .analysis-run{width:100%;margin-top:2px}
+  .recommend-list{display:grid;gap:9px;margin-top:11px}
+  .recommend-card{display:grid;grid-template-columns:50px minmax(0,1fr);gap:10px;border:1px solid var(--line);background:white;border-radius:14px;padding:9px}
+  .recommend-cover{width:50px;aspect-ratio:2/3;border-radius:6px;overflow:hidden;background:#ddd3c5}
+  .recommend-cover img{width:100%;height:100%;object-fit:cover}
+  .recommend-title{font-size:13px;font-weight:800;line-height:1.2}
+  .recommend-meta{font-size:10px;color:var(--muted);margin-top:3px}
+  .recommend-reason{font-size:11px;line-height:1.4;margin-top:6px}
+  .recommend-score{display:inline-block;margin-top:6px;font-size:9px;padding:3px 6px;border-radius:999px;background:var(--chip);color:var(--muted)}
+  .data-note{font-size:10px;color:var(--muted);line-height:1.4;margin-top:9px}
+
   .busy-pill{
     position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:9999;
     display:none;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;
@@ -241,11 +297,14 @@
     <div>
       <div class="title-line">
         <h1>Ma bibliothèque</h1>
-        <span class="version-label" onclick="adminTap()" title="v21a">v21a</span>
+        <span class="version-label" onclick="adminTap()" title="v22">v22</span>
       </div>
       <div class="sub" id="profileSubtitle">Bibliothèque de Maxime.</div>
     </div>
-    <button class="primary" id="editOnlyAdd" style="display:none" onclick="openAdd()">＋ Ajouter</button>
+    <div class="header-actions">
+      <button class="ghost analysis-open-btn" onclick="openAnalysis()">Analyse</button>
+      <button class="primary" id="editOnlyAdd" style="display:none" onclick="openAdd()">＋ Ajouter</button>
+    </div>
   </header>
 
   <div class="profile-strip" id="profileStrip" aria-label="Profils de lecture"></div>
@@ -286,6 +345,13 @@
     <button class="ghost" id="editModeBtn" onclick="toggleEditMode()">Édition</button>
     <div class="cloud-row"><span id="cloudStatus" class="cloud-status">Chargement…</span></div>
     <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)">
+  </div>
+</div>
+
+<div class="modal" id="analysisModal">
+  <div class="sheet analysis-sheet">
+    <div class="grab"></div>
+    <div id="analysisContent"></div>
   </div>
 </div>
 
@@ -362,7 +428,7 @@ Pour les classiques, les éditions courantes et les poches reconnus remontent.</
 
 
 <script>
-// Ma Bibliothèque V21a — profil Laurène + notes en étoiles
+// Ma Bibliothèque V22 — analyse de lecture + choix du prochain livre
 const GOOGLE_BOOKS_API_KEY = "AIzaSyDJvwlFA06uQKRNN-S3z0WgM9Bdxc7tD-Y";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
@@ -957,6 +1023,7 @@ function switchReaderProfile(profileId){
   if(search)search.value="";
 
   document.getElementById("editModal")?.classList.remove("open");
+  document.getElementById("analysisModal")?.classList.remove("open");
 
   if(location.hash.startsWith("#book=")){
     history.replaceState(null,"",location.pathname+location.search);
@@ -1642,6 +1709,519 @@ function isPubliclyLoaned(b){
     isOwnedByMe(b) &&
     String(b.loanedTo||"").trim()
   );
+}
+
+
+const analysisReferenceIds=new Set();
+
+function profileBooks(){
+  return books.filter(b=>(b.profileId||"maxime")===activeProfileId);
+}
+
+function analysisPages(b){
+  const n=Number(String(b?.pages??"").replace(/[^\d.]/g,""));
+  return Number.isFinite(n) && n>0 ? n : 0;
+}
+
+function analysisReadingDays(b){
+  if(b?.readingDays!=="" && b?.readingDays!==null && b?.readingDays!==undefined){
+    const n=Number(b.readingDays);
+    if(Number.isFinite(n) && n>=0)return n;
+  }
+  if(b?.started && b?.finished){
+    const n=readingDaysBetween(b.started,b.finished);
+    return n==="" ? null : Number(n);
+  }
+  return null;
+}
+
+function analysisRate(b){
+  const pages=analysisPages(b);
+  const days=analysisReadingDays(b);
+  if(!pages || days===null)return null;
+  // Un livre commencé et terminé le même jour compte comme 1 jour pour le rythme.
+  return pages/Math.max(1,days);
+}
+
+function mean(values){
+  const v=values.filter(x=>Number.isFinite(x));
+  return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null;
+}
+
+function median(values){
+  const v=values.filter(x=>Number.isFinite(x)).sort((a,b)=>a-b);
+  if(!v.length)return null;
+  const mid=Math.floor(v.length/2);
+  return v.length%2 ? v[mid] : (v[mid-1]+v[mid])/2;
+}
+
+function analysisStars(rating){
+  const n=Math.max(0,Math.min(5,Math.round(Number(rating)||0)));
+  return n ? "★".repeat(n)+"☆".repeat(5-n) : "";
+}
+
+function categoryTokens(value=""){
+  return String(value||"")
+    .split(/[,;/>|]+/)
+    .map(x=>normText(x))
+    .filter(Boolean);
+}
+
+function analysisWordTokens(value=""){
+  const stop=new Set([
+    "avec","dans","pour","par","sur","une","des","les","ses","son","aux","qui","que","quoi",
+    "plus","tout","tous","toute","mais","comme","sans","entre","vers","chez","leur","leurs",
+    "cette","cet","ces","est","sont","etre","ete","avait","ont","nous","vous","ils","elles",
+    "the","and","for","with","from","that","this","into","his","her","their","book","roman",
+    "livre","histoire","auteur","edition","un","du","de","la","le","en","et","a","au"
+  ]);
+  return normText(stripHtml(String(value||"")))
+    .split(" ")
+    .filter(x=>x.length>=4 && !stop.has(x));
+}
+
+function tokenSimilarity(a,b){
+  const A=new Set(analysisWordTokens(a));
+  const B=new Set(analysisWordTokens(b));
+  if(!A.size || !B.size)return 0;
+  let common=0;
+  A.forEach(x=>{if(B.has(x))common++});
+  return common/Math.max(1,Math.min(A.size,B.size));
+}
+
+function readBooksForAnalysis(){
+  return profileBooks()
+    .filter(b=>b.status==="Lu")
+    .sort((a,b)=>(b.finished||b.started||b.addedAt||"").localeCompare(a.finished||a.started||a.addedAt||""));
+}
+
+function currentYear(){
+  return new Date().getFullYear();
+}
+
+function topAuthors(read){
+  const map=new Map();
+  for(const b of read){
+    const author=String(b.author||"").trim();
+    if(!author)continue;
+    const key=normText(author);
+    if(!map.has(key))map.set(key,{name:author,count:0,ratings:[]});
+    const row=map.get(key);
+    row.count++;
+    if(Number(b.rating)>0)row.ratings.push(Number(b.rating));
+  }
+  return [...map.values()]
+    .map(x=>({...x,avg:mean(x.ratings)}))
+    .sort((a,b)=>b.count-a.count || (b.avg||0)-(a.avg||0) || a.name.localeCompare(b.name,"fr"));
+}
+
+function topCategories(read){
+  const map=new Map();
+  for(const b of read){
+    for(const cat of categoryTokens(b.category)){
+      if(!map.has(cat))map.set(cat,{name:String(b.category||cat).split(/[,;/>|]+/).find(x=>normText(x)===cat)?.trim()||cat,count:0,ratings:[]});
+      const row=map.get(cat);
+      row.count++;
+      if(Number(b.rating)>0)row.ratings.push(Number(b.rating));
+    }
+  }
+  return [...map.values()]
+    .map(x=>({...x,avg:mean(x.ratings)}))
+    .sort((a,b)=>b.count-a.count || (b.avg||0)-(a.avg||0) || a.name.localeCompare(b.name,"fr"));
+}
+
+function buildTasteSummary(read){
+  if(!read.length)return "Pas encore assez de lectures terminées pour dégager un profil.";
+
+  const liked=read.filter(b=>Number(b.rating)>=4);
+  const authors=topAuthors(read);
+  const cats=topCategories(read);
+  const likedPages=liked.map(analysisPages).filter(Boolean);
+  const med=median(likedPages);
+
+  const bits=[];
+  if(cats[0])bits.push(`tu lis surtout ${cats[0].name}`);
+  if(authors[0] && authors[0].count>=2)bits.push(`${authors[0].name} est ton auteur le plus lu`);
+  if(med)bits.push(`tes livres notés 4–5★ font typiquement autour de ${Math.round(med)} pages`);
+
+  if(!bits.length){
+    const rated=read.filter(b=>Number(b.rating)>0);
+    if(rated.length){
+      const avg=mean(rated.map(b=>Number(b.rating)));
+      return `Ta note moyenne est de ${avg.toFixed(1).replace(".",",")}★. Plus tu enrichis les genres et le nombre de pages, plus ce profil deviendra précis.`;
+    }
+    return "Tes données de lecture sont encore trop légères pour dégager des tendances fiables.";
+  }
+  return bits.join(" · ")+".";
+}
+
+function monthSeries12(read){
+  const now=new Date();
+  const months=[];
+  for(let i=11;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const y=d.getFullYear();
+    const m=d.getMonth();
+    const key=`${y}-${String(m+1).padStart(2,"0")}`;
+    months.push({
+      key,
+      label:new Intl.DateTimeFormat("fr-FR",{month:"short"}).format(d).replace(".",""),
+      count:0
+    });
+  }
+  const map=new Map(months.map(x=>[x.key,x]));
+  for(const b of read){
+    const iso=b.finished||"";
+    if(!/^\d{4}-\d{2}/.test(iso))continue;
+    const key=iso.slice(0,7);
+    if(map.has(key))map.get(key).count++;
+  }
+  return months;
+}
+
+function candidateText(b){
+  return [b.title,b.author,b.category,b.description,b.publisher].filter(Boolean).join(" ");
+}
+
+function candidateTasteScore(candidate,read){
+  let score=0;
+  const reasons=[];
+
+  const author=normText(candidate.author||"");
+  const sameAuthor=author ? read.filter(b=>normText(b.author||"")===author) : [];
+  if(sameAuthor.length){
+    const rated=sameAuthor.map(b=>Number(b.rating)).filter(x=>x>0);
+    const avg=mean(rated);
+    score+=18 + sameAuthor.length*4 + (avg?avg*3:0);
+    reasons.push(`auteur déjà lu${sameAuthor.length>1?" plusieurs fois":""}`);
+  }
+
+  const candCats=new Set(categoryTokens(candidate.category));
+  if(candCats.size){
+    const matches=[];
+    for(const b of read.filter(x=>Number(x.rating)>=4)){
+      const inter=categoryTokens(b.category).filter(x=>candCats.has(x));
+      if(inter.length)matches.push(...inter);
+    }
+    if(matches.length){
+      score+=Math.min(24,10+matches.length*4);
+      reasons.push("genre proche de tes lectures bien notées");
+    }
+  }
+
+  const liked=read.filter(b=>Number(b.rating)>=4);
+  let bestSimilarity=0;
+  for(const ref of liked){
+    bestSimilarity=Math.max(bestSimilarity,tokenSimilarity(candidateText(candidate),candidateText(ref)));
+  }
+  if(bestSimilarity>0.08){
+    score+=Math.min(24,bestSimilarity*45);
+    reasons.push("thèmes proches de livres que tu as aimés");
+  }
+
+  const pages=analysisPages(candidate);
+  const likedMedian=median(liked.map(analysisPages).filter(Boolean));
+  if(pages && likedMedian){
+    const ratio=Math.min(pages,likedMedian)/Math.max(pages,likedMedian);
+    score+=ratio*12;
+    if(ratio>=0.8)reasons.push("longueur proche de tes lectures favorites");
+  }
+
+  const rec=Number(candidate.recommendationCount)||0;
+  if(rec>0){
+    score+=Math.min(12,rec*3);
+    if(rec>=2)reasons.push(`recommandé ${rec} fois`);
+  }
+
+  if(candidate.status==="À lire")score+=8;
+
+  return {score,reasons};
+}
+
+function referenceScore(candidate,refs,read){
+  let score=0;
+  const reasons=[];
+
+  for(const ref of refs){
+    const refTitle=ref.title||"ce livre";
+
+    if(candidate.author && ref.author && normText(candidate.author)===normText(ref.author)){
+      score+=34;
+      reasons.push(`même auteur que « ${refTitle} »`);
+    }
+
+    const cCats=new Set(categoryTokens(candidate.category));
+    const rCats=categoryTokens(ref.category);
+    if(rCats.some(x=>cCats.has(x))){
+      score+=24;
+      reasons.push(`genre proche de « ${refTitle} »`);
+    }
+
+    const sim=tokenSimilarity(candidateText(candidate),candidateText(ref));
+    if(sim>0.06){
+      score+=Math.min(34,sim*60);
+      if(sim>=0.12)reasons.push(`thèmes proches de « ${refTitle} »`);
+    }
+
+    const cp=analysisPages(candidate), rp=analysisPages(ref);
+    if(cp && rp){
+      const ratio=Math.min(cp,rp)/Math.max(cp,rp);
+      score+=ratio*13;
+      if(ratio>=0.82)reasons.push(`longueur proche de « ${refTitle} »`);
+    }
+  }
+
+  const taste=candidateTasteScore(candidate,read);
+  score+=taste.score*0.35;
+  for(const r of taste.reasons){
+    if(reasons.length<4 && !reasons.includes(r))reasons.push(r);
+  }
+
+  return {score,reasons:[...new Set(reasons)]};
+}
+
+function candidatePool(scope="read",length="any"){
+  let pool=profileBooks().filter(b=>scope==="read-buy"
+    ? ["À lire","À acheter"].includes(b.status)
+    : b.status==="À lire");
+
+  if(length!=="any"){
+    pool=pool.filter(b=>{
+      const p=analysisPages(b);
+      if(!p)return false;
+      if(length==="short")return p<=220;
+      if(length==="medium")return p>220 && p<=400;
+      if(length==="long")return p>400;
+      return true;
+    });
+  }
+  return pool;
+}
+
+function rankedNextBooks(limit=3,refs=[],scope="read-buy",length="any"){
+  const read=readBooksForAnalysis();
+  return candidatePool(scope,length)
+    .map(b=>{
+      const ranked=refs.length ? referenceScore(b,refs,read) : candidateTasteScore(b,read);
+      return {book:b,score:ranked.score,reasons:ranked.reasons};
+    })
+    .sort((a,b)=>b.score-a.score ||
+      (b.book.recommendationCount||0)-(a.book.recommendationCount||0) ||
+      (a.book.addedAt||"").localeCompare(b.book.addedAt||""))
+    .slice(0,limit);
+}
+
+function renderRecommendationCards(items){
+  if(!items.length){
+    return '<div class="empty">Aucun livre ne correspond à ces critères.</div>';
+  }
+  return `<div class="recommend-list">${items.map((item,i)=>{
+    const b=item.book;
+    const reason=item.reasons.length
+      ? item.reasons.slice(0,3).join(" · ")
+      : "bon match avec les données disponibles dans ta bibliothèque";
+    return `<div class="recommend-card" onclick="closeAnalysis();openBook('${b.id}')">
+      <div class="recommend-cover">${coverImgHtml(b,true)}</div>
+      <div>
+        <div class="recommend-title">${i+1}. ${esc(b.title)}</div>
+        <div class="recommend-meta">${esc(b.author||"Auteur inconnu")} · ${esc(b.status)}${analysisPages(b)?` · ${analysisPages(b)} p.`:""}</div>
+        <div class="recommend-reason">${esc(reason)}</div>
+        <span class="recommend-score">score ${Math.max(0,Math.round(item.score))}</span>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function toggleAnalysisReference(bookId){
+  if(analysisReferenceIds.has(bookId)){
+    analysisReferenceIds.delete(bookId);
+  }else{
+    if(analysisReferenceIds.size>=3){
+      alert("Choisis au maximum 3 livres de référence.");
+      return;
+    }
+    analysisReferenceIds.add(bookId);
+  }
+  renderAnalysis();
+}
+
+function runReferenceRecommendations(){
+  const refs=[...analysisReferenceIds]
+    .map(id=>books.find(b=>b.id===id))
+    .filter(Boolean);
+
+  const scope=document.getElementById("analysisCandidateScope")?.value||"read";
+  const length=document.getElementById("analysisLength")?.value||"any";
+  const results=rankedNextBooks(3,refs,scope,length);
+  const target=document.getElementById("analysisRecommendationResults");
+  if(target)target.innerHTML=renderRecommendationCards(results);
+}
+
+function openAnalysis(){
+  analysisReferenceIds.clear();
+  renderAnalysis();
+  document.getElementById("analysisModal").classList.add("open");
+}
+
+function closeAnalysis(){
+  document.getElementById("analysisModal")?.classList.remove("open");
+}
+
+function renderAnalysis(){
+  const p=activeProfile();
+  const read=readBooksForAnalysis();
+  const year=currentYear();
+  const readThisYear=read.filter(b=>(b.finished||"").startsWith(String(year)));
+  const pageBooks=read.filter(b=>analysisPages(b)>0);
+  const totalPages=pageBooks.reduce((sum,b)=>sum+analysisPages(b),0);
+  const pageBooksYear=readThisYear.filter(b=>analysisPages(b)>0);
+  const pagesYear=pageBooksYear.reduce((sum,b)=>sum+analysisPages(b),0);
+  const rates=read.map(analysisRate).filter(x=>Number.isFinite(x));
+  const avgRate=mean(rates);
+  const durations=read.map(analysisReadingDays).filter(x=>Number.isFinite(x));
+  const avgDuration=mean(durations);
+  const rated=read.filter(b=>Number(b.rating)>0);
+  const avgRating=mean(rated.map(b=>Number(b.rating)));
+  const fiveStars=read.filter(b=>Number(b.rating)===5).length;
+
+  const authors=topAuthors(read).slice(0,5);
+  const cats=topCategories(read).slice(0,5);
+  const months=monthSeries12(read);
+  const maxMonth=Math.max(1,...months.map(x=>x.count));
+
+  const paced=read
+    .filter(b=>analysisRate(b)!==null)
+    .slice(0,12);
+
+  const referenceBooks=read
+    .filter(b=>Number(b.rating)>=3)
+    .sort((a,b)=>(Number(b.rating)||0)-(Number(a.rating)||0) ||
+      (b.finished||"").localeCompare(a.finished||""))
+    .slice(0,24);
+
+  const automaticNext=rankedNextBooks(3,[], "read-buy", "any");
+
+  document.getElementById("analysisContent").innerHTML=`
+    <div class="analysis-head">
+      <div>
+        <h2>Analyse · ${esc(p.name)}</h2>
+        <p>Données calculées à partir de la bibliothèque de ce profil.</p>
+      </div>
+      <button class="ghost analysis-close" onclick="closeAnalysis()">Fermer</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-value">${readThisYear.length}</div>
+        <div class="kpi-label">livre${readThisYear.length>1?"s":""} lu${readThisYear.length>1?"s":""} en ${year}<br>${read.length} au total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">${pagesYear.toLocaleString("fr-FR")}</div>
+        <div class="kpi-label">pages connues en ${year}<br>${totalPages.toLocaleString("fr-FR")} au total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">${avgRate?Math.round(avgRate):"—"}</div>
+        <div class="kpi-label">pages / jour moyen<br>sur ${rates.length} livre${rates.length>1?"s":""}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">${avgRating?avgRating.toFixed(1).replace(".",",")+"★":"—"}</div>
+        <div class="kpi-label">note moyenne<br>${fiveStars} livre${fiveStars>1?"s":""} à 5★</div>
+      </div>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Ce que tu aimes lire</h3>
+      <p class="taste-summary">${esc(buildTasteSummary(read))}</p>
+      <div class="taste-grid">
+        <div class="taste-card">
+          <div class="taste-card-title">Auteurs les plus lus</div>
+          ${authors.length?authors.map(x=>`<div class="taste-row">
+            <span class="taste-name">${esc(x.name)}</span>
+            <span class="taste-meta">${x.count} livre${x.count>1?"s":""}${x.avg?` · ${x.avg.toFixed(1).replace(".",",")}★`:""}</span>
+          </div>`).join(""):'<div class="notice">Pas encore assez de données.</div>'}
+        </div>
+        <div class="taste-card">
+          <div class="taste-card-title">Genres / thèmes</div>
+          ${cats.length?cats.map(x=>`<div class="taste-row">
+            <span class="taste-name">${esc(x.name)}</span>
+            <span class="taste-meta">${x.count} livre${x.count>1?"s":""}${x.avg?` · ${x.avg.toFixed(1).replace(".",",")}★`:""}</span>
+          </div>`).join(""):'<div class="notice">Les catégories sont encore trop peu renseignées.</div>'}
+        </div>
+      </div>
+      <div class="data-note">${pageBooks.length<read.length?`${read.length-pageBooks.length} livre${read.length-pageBooks.length>1?"s":""} lu${read.length-pageBooks.length>1?"s":""} n’ont pas encore de nombre de pages : les statistiques de pages sont donc partielles.`:"Les nombres de pages sont renseignés pour tous les livres lus."}</div>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Rythme sur 12 mois</h3>
+      <p class="analysis-help">Nombre de livres terminés par mois.</p>
+      <div class="month-chart">
+        ${months.map(m=>`<div class="month-col">
+          <div class="month-value">${m.count||""}</div>
+          <div class="month-bar-wrap"><div class="month-bar" style="height:${Math.max(2,Math.round((m.count/maxMonth)*82))}px"></div></div>
+          <div class="month-label">${esc(m.label)}</div>
+        </div>`).join("")}
+      </div>
+      ${avgDuration!==null?`<div class="data-note">Durée moyenne entre début et fin : ${Math.round(avgDuration)} jour${Math.round(avgDuration)>1?"s":""}.</div>`:""}
+    </div>
+
+    <div class="analysis-section">
+      <h3>Pages par jour · livre par livre</h3>
+      <p class="analysis-help">Moyenne calculée entre le début et la fin. Un livre commencé et terminé le même jour compte comme une journée pour ce calcul.</p>
+      <div class="pace-list">
+        ${paced.length?paced.map(b=>{
+          const pages=analysisPages(b);
+          const days=analysisReadingDays(b);
+          const rate=analysisRate(b);
+          return `<div class="pace-row" onclick="closeAnalysis();openBook('${b.id}')">
+            <div>
+              <div class="pace-title">${esc(b.title)}</div>
+              <div class="pace-sub">${pages} pages · ${days===0?"même jour":days+" jour"+(days>1?"s":"")}</div>
+            </div>
+            <div class="pace-rate">${Math.round(rate)} p/j</div>
+          </div>`;
+        }).join(""):'<div class="empty">Il faut le nombre de pages et les dates de lecture pour calculer ce rythme.</div>'}
+      </div>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Mes prochains suggérés</h3>
+      <p class="analysis-help">Classement automatique fondé sur tes notes, auteurs, genres, longueurs et recommandations déjà présentes dans la bibliothèque.</p>
+      ${renderRecommendationCards(automaticNext)}
+    </div>
+
+    <div class="analysis-section">
+      <h3>Choisir mon prochain livre</h3>
+      <p class="analysis-help">Choisis jusqu’à 3 livres que tu as aimés. Le moteur cherchera les meilleurs correspondants dans ta pile. Cette V22 utilise tes données, pas une IA générative.</p>
+
+      <div class="chooser-box">
+        <div class="reference-chips">
+          ${referenceBooks.length?referenceBooks.map(b=>`
+            <button type="button" class="reference-chip ${analysisReferenceIds.has(b.id)?"active":""}" onclick="toggleAnalysisReference('${b.id}')">
+              <div class="reference-title">${esc(b.title)}</div>
+              <div class="reference-stars">${analysisStars(b.rating)}</div>
+            </button>`).join(""):'<div class="notice">Note quelques livres lus pour pouvoir les utiliser comme références.</div>'}
+        </div>
+
+        <div class="analysis-controls">
+          <select id="analysisCandidateScope">
+            <option value="read">Dans mes « À lire »</option>
+            <option value="read-buy">À lire + À acheter</option>
+          </select>
+          <select id="analysisLength">
+            <option value="any">Toutes les longueurs</option>
+            <option value="short">Court · ≤ 220 pages</option>
+            <option value="medium">Moyen · 221–400 pages</option>
+            <option value="long">Long · > 400 pages</option>
+          </select>
+        </div>
+
+        <button type="button" class="primary analysis-run" onclick="runReferenceRecommendations()">Me proposer 3 livres</button>
+        <div id="analysisRecommendationResults"></div>
+      </div>
+    </div>
+
+    <div class="data-note">Les recommandations sont volontairement explicables et basées sur les données disponibles. Une couche IA sémantique pourra être ajoutée ensuite sans changer ce socle.</div>
+  `;
 }
 
 function render(){
